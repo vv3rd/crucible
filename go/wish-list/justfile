@@ -1,0 +1,2 @@
+dev:
+	ls *.go | entr -rz go run .
