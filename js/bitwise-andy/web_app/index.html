@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Bitwise Andy</title>
+
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css"
+		/>
+		<link rel="stylesheet" href="./src/styles.css" />
+	</head>
+	<body>
+		<main>
+			<input
+				id="stage-1"
+				name="_stage"
+				type="radio"
+				value="premise"
+				checked
+			/>
+			<input id="stage-2" name="_stage" type="radio" value="arrayin" />
+
+			<form id="arrayin" action="/api/solve" method="post" target="dump">
+				<label>
+					Enter the array here, and get the answer (press ENTER to
+					submit)
+					<input
+						type="text"
+						name="nums"
+						required
+						maxlength="200"
+						pattern="[0-9][0-9 [],;]*"
+						autocomplete="off"
+						value="1, 2, 3"
+					/>
+					<small> Noooo! Don't input that! </small>
+				</label>
+
+				<iframe
+					name="dump"
+					width="100%"
+					height="100%"
+					src="data:text/html;base64,PGh0bWw+PGhlYWQ+PG1ldGEgbmFtZT0iY29sb3Itc2NoZW1lIiBjb250ZW50PSJsaWdodCBkYXJrIiAvPjwvaGVhZD48Ym9keT48L2JvZHk+PC9odG1sPg=="
+				></iframe>
+			</form>
+			<article id="premise" style="margin-top: 0">
+				<hgroup>
+					<h2>Bitwise Andy</h2>
+					<h3>A coding challange solved and overengineered 🔥</h3>
+				</hgroup>
+
+				<p>
+				Given a zero-indexed array <code>nums</code> of length
+				<code>n</code>, where <code>n &gt;= 1</code>, that contains
+				positive integers. Consider all possible sub-arrays
+				<code>nums[i: j]</code> where
+				<code>0 &lt;= i &lt; j &lt;= n</code>, and consider taking a
+				bitwise <code>AND</code> of their elements. For example, a
+				sub-array <code>[15, 7, 14]</code> has a bitwise
+				<code>AND</code> equal to 6. We will call m the maximum possible
+				bitwise <code>AND</code> of any sub-array of nums. Find how many
+				sub-arrays of nums have the the bitwise <code>AND</code> exactly
+				equal to <code>m</code>. Some examples:
+				<!-- prettier-ignore -->
+				<pre>
+[1] -> 1
+[1, 1] -> 2
+[16, 8, 4] -> 1
+</pre>
+				</p>
+				<label role="button" for="stage-2">Let's go</label>
+			</article>
+		</main>
+	</body>
+</html>
