@@ -1,116 +1,154 @@
+import { CircularDependencyError, UnboundTokenError } from "./errors";
+
 console.log("Hello via Bun!");
 
-type Action<T = string, P = unknown> = [T, P];
+const TokenType = Symbol();
 
-interface State<V> {
-  subscribe(callback: (state: V) => void): () => void;
-  snapshot(): V;
+interface Event<T = string, P = unknown> {
+	type: T;
+	data: P;
+}
+
+export type Token<T extends {}> = symbol & {
+	[TokenType]?: T;
+};
+export namespace Token {
+	export type Value<T extends Token<any>> = T extends Token<infer U> ? U : never;
+
+	export type List<S extends any[]> = {
+		[K in keyof S]: Token<S[K]>;
+	};
+}
+
+interface Subject<V> {
+	subscribe(callback: (state: V) => void): () => void;
+	snapshot(): V;
 }
 
 interface Task {
-  (store: Store<any, any>): void | Promise<void>;
+	(store: Store<any>): void | Promise<void>;
 }
 
-interface Select<M> {
-  [key: string]: (model: M) => unknown;
+interface Actor<M, E extends Event> {
+	(model: M, action: E): { next: M; task: Task };
 }
 
-interface Reduce<M, A extends Action> {
-  (model: M): (action: A) => { next: M; task: Task };
+interface Store<E extends Event> {
+	select<T extends {}>(key: Token<T>): Subject<T>;
+	dispatch(action: E): void;
 }
 
-interface Module<M, A extends Action, N extends string> {
-  name: N;
-  reduce: Reduce<M, A>;
-  select: Select<M>;
+interface Provider {
+	resolve<T extends {}>(token: Token<T>): T;
 }
-namespace Module {
-  export type Any = Module<any, any, any>;
-  export type inferModel<M extends Any> = M extends Module<infer M, any, any>
-    ? M
-    : never;
+namespace Provider {
+	export type BindMethod = <T extends {}>(
+		token: Token<T>,
+		resolver: (...args: unknown[]) => T,
+	) => BindMethod;
 
-  export type inferAction<M extends Any> = M extends Module<any, infer A, any>
-    ? A
-    : never;
+	export type Builder = {
+		bind: BindMethod;
+	};
 
-  export type inferName<M extends Any> = M extends Module<any, any, infer N>
-    ? N
-    : never;
+	export type BuilderScope = (builder: Builder) => void;
 }
 
-type DefineActions<A> = {
-  [K in keyof A]: [K, A[K]];
-}[keyof A];
+type ToolMkSelector = {
+	<A extends unknown[], R>(
+		selector: (...args: A) => R,
+	): (...tokens: Token.List<A>) => (...args: A) => R;
 
-const joinModules = <Ms extends readonly Module<any, any, string>[]>() => {};
-
-type ModuleJoin<T extends Module<any, any, any>[], N extends string> = {
-  [K in Module.inferName<T[number]>]: Module<
-    Module.inferModel<Extract<T[number], Module<any, any, K>>>,
-    Module.inferAction<Extract<T[number], Module<any, any, K>>>,
-    N
-  >;
+	<T extends readonly Token<{}>[]>(
+		...tokens: T
+	): <S extends (...args: { [K in keyof T]: Token.Value<T[K]> }) => any>(selector: S) => S;
 };
 
-interface NewModule<M, A extends Action, S> {
-  create: () => M;
-  reduce: (model: M) => (action: A) => void | {
-    next?: M;
-    task?: Task;
-  };
-  select: {
-    [K in keyof S]: (model: M) => S[K];
-  };
-}
+const mkTools = () => {
+	const injections = new Map<Function, Token<{}>[]>();
 
-type OptionalityTuple<T> = T extends void ? [] : [T];
+	const _mkSelector = (tokensOrSelector: any) => {
+		const mkInjection = (tokens: Token<any>[], selector: Function) => {
+			injections.set(selector, tokens);
+			return selector;
+		};
+		if (typeof tokensOrSelector === "function") {
+			const selector = tokensOrSelector;
+			return (tokens: any) => mkInjection(tokens, selector);
+		} else {
+			const tokens = tokensOrSelector;
+			return (selector: any) => mkInjection(tokens, selector);
+		}
+	};
+	const mkSelector = _mkSelector as ToolMkSelector;
 
-interface Store<S, A extends [string, unknown?]> {
-  select<K extends keyof S>(key: K): State<S[K]>;
-  dispatch<K extends A[0]>(
-    action: K,
-    ...payload: OptionalityTuple<Extract<A, Action<K, any>>[1]>
-  ): void;
-}
+	const mkProvider = (builderScope: Provider.BuilderScope) => {
+		let bindings = new Map<Token<{}>, (...args: unknown[]) => unknown>();
 
-const mkStore = <M, S, A extends Action>(
-  module: NewModule<M, A, S>,
-): Store<S, A> => {
-  return {
-    dispatch(action, ...[payload]) {},
-    select(key) {
-      throw new Error("not implemented");
-    },
-  };
+		const bindMethod: Provider.BindMethod = (token, resolver) => (
+			bindings.set(token, resolver), bindMethod
+		);
+		builderScope({
+			bind: bindMethod,
+		});
+
+		const resolutionChain = new Set<Token<{}>>();
+
+		const resolve = <T extends {}>(token: Token<T>): T => {
+			if (resolutionChain.has(token)) {
+				throw new CircularDependencyError(token);
+			}
+			try {
+				resolutionChain.add(token);
+				const selector = bindings.get(token);
+				if (!selector) {
+					throw new UnboundTokenError(token);
+				}
+				const dependencies = injections.get(selector) ?? [];
+				const result = selector(...dependencies.map(resolve));
+				return result as T;
+			} finally {
+				resolutionChain.delete(token);
+			}
+		};
+
+		const provider: Provider = {
+			resolve,
+		};
+
+		return provider;
+	};
+
+	const mkToken = <T extends {}>(name: string): Token<T> => Symbol.for(`token:${name}`);
+
+	const mkStore = <M, A extends Event>(actor: Actor<M, A>, model: M): Store<A> => {
+		const subscribers = new Set<Function>();
+
+		const store: Store<A> = {
+			select<T extends {}>(token: Token<T>): Subject<T> {
+				const state: Subject<T> = {
+					snapshot() {
+						throw new Error("TODO");
+					},
+					subscribe(callback) {
+						return () => {};
+					},
+				};
+				return state;
+			},
+			dispatch(action) {
+				const { next, task } = actor(model, action);
+			},
+		};
+		return store;
+	};
+
+	return {
+		mkProvider,
+		mkSelector,
+		mkToken,
+		mkStore,
+	};
 };
 
-type AppAction = DefineActions<{
-  increment: { by: number };
-  reset: void;
-}>;
 
-enum state {
-  kek,
-  lol,
-}
-
-const store = mkStore({
-  create: () => ({
-    count: 0,
-    state: state.kek,
-  }),
-  reduce: (model) => {
-    switch (model.state) {
-      case state.kek:
-        return (action: AppAction) => {};
-      case state.lol:
-        return (action: AppAction) => {};
-    }
-  },
-  select: {
-    "kek/getter": (model) => model.count,
-  },
-});
-
-store.dispatch("reset");
