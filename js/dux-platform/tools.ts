@@ -1,8 +1,5 @@
 import { CircularDependencyError, UnboundTokenError } from "./errors";
 
-const { assign } = Object;
-const { isArray } = Array;
-
 const never = (): never => {
 	throw new Error("Never should be called");
 };
@@ -103,32 +100,49 @@ const mkTools = () => {
 
 	const mkToken = <T extends {}>(name: string): Token<T> => Symbol.for(`token:${name}`);
 
-	const mkStore = <M, A extends Event>(
-		actor: Actor<M, A | Event>,
+	const mkStore = <M extends Some, A extends Event>(
+		actor: Actor<M, A>,
 		provider: Provider<M>,
-	): Store<A> => {
+	): Store<M, A> => {
 		const subscribers = new Set<Function>();
+		const notify = () => subscribers.forEach((sub) => sub(model));
 
-		const store: Store<A> = {
-			select<T extends {}>(token: Token<T>): State<T> {
-				const selector = provider.resolve(token);
-				const state: State<T> = {
-					snapshot() {
-						return selector(model);
-					},
-					subscribe(callback) {
-						return () => {};
-					},
-				};
-				return state;
-			},
-			dispatch(action) {
-				const { next, task } = actor(model, action);
-				model = next;
-				for (const sub of subscribers) sub(model);
-				task(store);
-			},
+		const mkState = <T extends Some>(selector: Fn<T, [model: M]>): Store<T, A> => {
+			let currentState: T;
+			return {
+				snapshot() {
+					return (currentState = selector(model));
+				},
+				subscribe(callback) {
+					const subscriber = () => {
+						const state = selector(model);
+						if (state !== currentState) {
+							callback((currentState = state));
+						}
+					};
+					subscribers.add(subscriber);
+					return () => {
+						subscribers.delete(subscriber);
+					};
+				},
+				select,
+				dispatch
+			};
 		};
+
+		const select = <T extends Some>(token: Token<T>): State<T> => {
+			const selector = provider.resolve(token);
+			return mkState(selector);
+		};
+
+		const dispatch = (action: A): void => {
+			const { next, task } = actor(model, action);
+			model = next;
+			notify();
+			task(store);
+		};
+
+		const store = mkState(model => model);
 
 		let { next: model } = actor(undefined, {
 			type: Math.random().toString(36).substring(2),
@@ -151,7 +165,7 @@ interface Event<T = string, P = undefined> {
 }
 
 const TokenType = Symbol();
-export type Token<T extends {}> = symbol & {
+export type Token<T extends Some> = symbol & {
 	[TokenType]?: T;
 };
 export namespace Token {
@@ -160,21 +174,21 @@ export namespace Token {
 	export type List<S extends any[]> = { [K in keyof S]: Token<S[K]> };
 }
 
+interface Task {
+	(store: Store<Some, Event>): void | Promise<void>;
+}
+
+interface Actor<M, E extends Event> {
+	(model: M | undefined, action: E | Event): { next: M; task: Task };
+}
+
 interface State<M> {
 	subscribe(callback: (state: M) => void): () => void;
 	snapshot(): M;
 }
 
-interface Task {
-	(store: Store): void | Promise<void>;
-}
-
-interface Actor<M, E extends Event> {
-	(model: M | undefined, action: E): { next: M; task: Task };
-}
-
-interface Store<E extends Event = Event> {
-	select<T extends {}>(key: Token<T>): State<T>;
+interface Store<M extends Some, E extends Event> extends State<M> {
+	select<T extends Some>(key: Token<T>): State<T>;
 	dispatch(action: E): void;
 }
 
