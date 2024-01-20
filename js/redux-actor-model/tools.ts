@@ -4,6 +4,10 @@ const never = (): never => {
 	throw new Error("Never should be called");
 };
 
+const identity = <T,>(thing: T): T => thing;
+
+const noop = (..._: any[]): void => {};
+
 type Some = {};
 type Fn<R = void, A extends any[] = []> = (...args: A) => R;
 type SomeFn = Fn<Some, Some[]>;
@@ -100,55 +104,68 @@ const mkTools = () => {
 
 	const mkToken = <T extends {}>(name: string): Token<T> => Symbol.for(`token:${name}`);
 
-	const mkStore = <M extends Some, A extends Event>(
-		actor: Actor<M, A>,
-		provider: Provider<M>,
-	): Store<M, A> => {
-		const subscribers = new Set<Function>();
-		const notify = () => subscribers.forEach((sub) => sub(model));
-
-		const mkState = <T extends Some>(selector: Fn<T, [model: M]>): Store<T, A> => {
-			let currentState: T;
-			return {
-				snapshot() {
-					return (currentState = selector(model));
-				},
-				subscribe(callback) {
-					const subscriber = () => {
-						const state = selector(model);
-						if (state !== currentState) {
-							callback((currentState = state));
-						}
-					};
-					subscribers.add(subscriber);
-					return () => {
-						subscribers.delete(subscriber);
-					};
-				},
-				select,
-				dispatch
-			};
+	const mkObservableCell = <T,>(value: T) => {
+		const subs = new Set<Fn>();
+		return {
+			get() {
+				return value;
+			},
+			set(newValue: T) {
+				value = newValue;
+				for (const sub of subs) sub();
+			},
+			subscribe(subscriber: Fn) {
+				subs.add(subscriber);
+				return () => {
+					subs.delete(subscriber);
+				};
+			},
 		};
+	};
 
-		const select = <T extends Some>(token: Token<T>): State<T> => {
-			const selector = provider.resolve(token);
-			return mkState(selector);
-		};
+	const mkId = () => Math.random().toString(36).substring(2);
 
-		const dispatch = (action: A): void => {
-			const { next, task } = actor(model, action);
-			model = next;
-			notify();
-			task(store);
-		};
-
-		const store = mkState(model => model);
-
-		let { next: model } = actor(undefined, {
-			type: Math.random().toString(36).substring(2),
+	const mkStore = <M extends Some, A extends Event>(actor: Actor<M, A>): Store<M, A> => {
+		let { next: model, task } = actor(undefined, { type: mkId() });
+		const cell = mkObservableCell({
+			actor,
+			model,
+			task,
 		});
 
+		const store: Store<M, A> = createStore<M, A>(cell);
+
 		return store;
+	};
+
+	const createStore = <M extends Some, E extends Event>(
+		cell: Cell<StateBundle<M, E>>,
+	): Store<M, E> => {
+		return {
+			snapshot() {
+				return cell.get().model;
+			},
+			subscribe(callback) {
+				return cell.subscribe(callback);
+			},
+			select(selector) {
+				const subModel = selector(cell.get().model);
+				const nextCell = mkObservableCell({ ...cell.get(), model: subModel });
+				cell.subscribe(() => {
+					const selected = selector(cell.get().model);
+					if (nextCell.get().model !== selected) {
+						nextCell.set({ ...cell.get(), model: selected });
+					}
+				});
+
+				throw new Error("");
+			},
+			dispatch(action) {
+				const { actor, model } = cell.get();
+				const { next, task } = actor(model, action);
+				cell.set({ actor, model: next, task });
+			},
+		};
 	};
 
 	return {
@@ -182,15 +199,26 @@ interface Actor<M, E extends Event> {
 	(model: M | undefined, action: E | Event): { next: M; task: Task };
 }
 
-interface State<M> {
-	subscribe(callback: (state: M) => void): () => void;
-	snapshot(): M;
+interface Observable {
+	subscribe(callback: Fn): Fn;
 }
 
-interface Store<M extends Some, E extends Event> extends State<M> {
-	select<T extends Some>(key: Token<T>): State<T>;
+interface Cell<T extends Some> extends Observable {
+	get(): T;
+	set(value: T): void;
+}
+
+interface Store<M extends Some, E extends Event> extends Observable {
+	snapshot(): M;
+	select<T extends Some>(selector: (model: M) => T): Store<T, E>;
 	dispatch(action: E): void;
 }
+
+type StateBundle<M extends Some, E extends Event> = {
+	actor: Actor<M, E>;
+	model: M;
+	task: Task;
+};
 
 interface Provider<M> {
 	resolve<T extends {}>(token: Token<T>): (model: M) => T;
