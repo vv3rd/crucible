@@ -1,0 +1,8 @@
+[language-server.ngserver]
+command = "ngserver" 
+args = ["--stdio", "--tsProbeLocations", "$(npm -g root)", "--ngProbeLocations", "$(npm -g root)"] 
+
+[[language]]
+name = "html"
+language-servers = ["ngserver"]
+auto-format = false

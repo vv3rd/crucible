@@ -1,0 +1,7 @@
+[language-server.java-lsp]
+command = "java-language-server"
+
+[[language]]
+name = "java"
+language-servers = ["java-lsp"]
+formatter = { command = "google-java-format", args = ["-", "-a"] }
