@@ -9,41 +9,41 @@ import java.net.Socket;
 public class App {
     private static int port = 8080;
 
-    public static void main(String[] args) {
-        System.out.printf("Hello world!");
+    private static String CRLF = "\n\r";
 
-        ServerSocket ss = null;
+    public static void main(String[] args) {
+
+        ServerSocket socketServer = null;
         Socket socket = null;
-        InputStream input$ = null;
-        OutputStream output$ = null;
+        InputStream inStream = null;
+        OutputStream outStream = null;
 
         try {
-            ss = new ServerSocket(port);
-            socket = ss.accept();
-            input$ = socket.getInputStream();
-            output$ = socket.getOutputStream();
+            System.out.println("Listening on port: " + port);
 
-            final String CRLF = "\n\r";
+            socketServer = new ServerSocket(port);
+            socket = socketServer.accept();
+            inStream = socket.getInputStream();
+            outStream = socket.getOutputStream();
+
+            System.out.println("Accepted connection");
 
             String html = readFile("index.html");
 
-            String http =
-                    "HTTP/1.1 200 OK"
-                            + CRLF
-                            + "Content-Length: "
-                            + html.getBytes().length
-                            + CRLF
-                            + CRLF
-                            + html
-                            + CRLF
-                            + CRLF;
+            StringBuilder response = new StringBuilder();
+            response.append("HTTP/1.1 200 OK");
+            response.append(CRLF);
+            response.append("Content-Length: " + html.getBytes().length);
+            response.append(CRLF + CRLF);
+            response.append(html);
+            response.append(CRLF + CRLF);
 
-            output$.write(http.getBytes());
+            outStream.write(response.toString().getBytes());
 
-            input$.close();
-            output$.close();
+            inStream.close();
+            outStream.close();
             socket.close();
-            ss.close();
+            socketServer.close();
         } catch (IOException e) {
         }
     }
