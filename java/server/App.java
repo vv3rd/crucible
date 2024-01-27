@@ -19,14 +19,14 @@ public class App {
         OutputStream outStream = null;
 
         try {
-            System.out.println("Listening on port: " + port);
+            System.out.println("Listening on port: " + port + CRLF);
 
             socketServer = new ServerSocket(port);
             socket = socketServer.accept();
             inStream = socket.getInputStream();
             outStream = socket.getOutputStream();
 
-            System.out.println("Accepted connection");
+            System.out.println("Accepted connection" + CRLF);
 
             String html = readFile("index.html");
 
