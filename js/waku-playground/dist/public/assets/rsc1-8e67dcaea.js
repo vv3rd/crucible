@@ -1,0 +1,1 @@
+import"./index-ZTOZCyuL.js";import{Children as R,Root as f,ServerRoot as h,Slot as p,fetchRSC as S,prefetchRSC as c,useRefetch as i}from"./waku-client.js";import"./index-ygKPTG2k.js";export{R as Children,f as Root,h as ServerRoot,p as Slot,S as fetchRSC,c as prefetchRSC,i as useRefetch};
