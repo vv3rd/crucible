@@ -19,7 +19,7 @@ func main() {
 	fmt.Println(string(commitsJson))
 }
 
-const repo = "/home/odmin/Projects/dunmer-bot"
+const repo = "./"
 
 func GetCommitsHistory() []GitCommit {
 	gitFormatParts := []string{"%H", "%P", "%at", "%s"}
