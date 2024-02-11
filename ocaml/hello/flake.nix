@@ -12,6 +12,7 @@
       devShell = pkgs.mkShell {
         packages = [
           pkgs.ocamlPackages.ocaml-lsp
+          pkgs.ocamlPackages.utop
           pkgs.ocaml
         ];
       };

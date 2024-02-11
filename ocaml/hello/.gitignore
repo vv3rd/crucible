@@ -1,7 +1,7 @@
 .direnv
 *.cmi
 *.cmo
-
+*.out
 
 # compiled binary
 main
