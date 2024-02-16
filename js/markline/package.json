@@ -1,0 +1,22 @@
+{
+  "name": "all",
+  "version": "1.0.50",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun run --watch src/index.tsx & bun tailwindcss -i src/index.css -o public/index.gen.css --watch"
+  },
+  "dependencies": {
+    "@elysiajs/html": "^0.7.3",
+    "@elysiajs/static": "^0.7.1",
+    "brandi": "^5.0.0",
+    "elysia": "latest",
+    "redux": "^4.2.1"
+  },
+  "devDependencies": {
+    "@total-typescript/ts-reset": "^0.5.1",
+    "bun-types": "latest",
+    "daisyui": "latest",
+    "tailwindcss": "^3.3.5"
+  },
+  "module": "src/index.js"
+}
