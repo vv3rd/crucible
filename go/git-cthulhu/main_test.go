@@ -5,14 +5,15 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-type TestCaseJson struct {
-	Name  string `json:"name"`
+type YamlTestCase struct {
+	Name  string `json:"case"`
 	Given []int  `json:"given"`
 	Want  string `json:"want"`
 }
@@ -23,13 +24,8 @@ type TestCase struct {
 	Want  []string
 }
 
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
 func TestDrawGraph(t *testing.T) {
+
 	cases := readTestYaml()
 	tests := make([]TestCase, len(cases))
 
@@ -41,17 +37,24 @@ func TestDrawGraph(t *testing.T) {
 		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.Name, func(t *testing.T) {
-			if got := DrawGraph(tt.Given); !reflect.DeepEqual(got, tt.Want) {
-				t.Errorf("DrawGraph() == %v, want %v", got, tt.Want)
+	for _, tc := range tests {
+		t.Run(tc.Name, func(t *testing.T) {
+			if got := DrawGraph(tc.Given); !reflect.DeepEqual(got, tc.Want) {
+				want := fmt.Sprintf("\n%s", strings.Join(tc.Want, "\n"))
+				t.Errorf("DrawGraph() == %v, want %v", got, want)
 			}
 		})
 	}
 }
 
-func readTestYaml() []TestCaseJson {
-	var cases []TestCaseJson
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func readTestYaml() []YamlTestCase {
+	var cases []YamlTestCase
 	file, err := os.Open("./tests/DrawGraph.yaml")
 	check(err)
 	textBytes, err := io.ReadAll(file)
@@ -61,30 +64,29 @@ func readTestYaml() []TestCaseJson {
 }
 
 func fakeGitHistory(commits ...int) []GitCommit {
-	arr := make([]GitCommit, 0)
+	history := make([]GitCommit, 0)
+	lastHashInBranch := make(map[int]string)
 
-	var (
-		count int
-	)
+	count := 0
 
-	incHash := func() string {
-		count++
-		return strings.Repeat(fmt.Sprintf("%d", count), 6)
-	}
-
-	arr = append(arr, GitCommit{
-		Hash:    incHash(),
+	history = append(history, GitCommit{
+		Hash:    strings.Repeat(fmt.Sprintf("%d", count), 6),
 		Parents: []string{},
 	})
+	lastHashInBranch[0] = history[0].Hash
 
-	for _, i := range commits {
-		_ = i
-		arr = append(arr, GitCommit{
-			Hash:    incHash(),
-			Parents: []string{arr[len(arr)-1].Hash},
+	for _, commitBranchIdx := range commits {
+		count += 1
+		hash := strings.Repeat(fmt.Sprintf("%d", count), 6)
+		last := lastHashInBranch[commitBranchIdx]
+		lastHashInBranch[commitBranchIdx] = hash
+		history = append(history, GitCommit{
+			Hash:    hash,
+			Parents: []string{last},
 		})
-
 	}
 
-	return arr
+	slices.Reverse(history)
+
+	return history
 }

@@ -1,24 +1,27 @@
 package main
 
-//   │ │ │
-// ╭─O─╯─╯─╮
-//         │
-//
-// ╭╮╯╰│─
-
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 )
 
-func main() {
+type GitCommit struct {
+	Hash    string   `json:"hash"`
+	Parents []string `json:"parents"`
+	Date    string   `json:"date"`
+	Subject string   `json:"subject"`
 }
 
-const repo = "./"
+func main() {
+	commits := ReadGitHistory("./")
+	x, _ := json.Marshal(commits)
+	fmt.Printf("%v\n", string(x))
+}
 
-func GetCommitsHistory() []GitCommit {
+func ReadGitHistory(repo string) []GitCommit {
 	gitFormatParts := []string{"%H", "%P", "%at", "%s"}
 	gitFormatSeparator := " nxvix4ahuqi_613z51ft7ix_pgdrqss94di "
 
@@ -67,11 +70,4 @@ func GetCommitsHistory() []GitCommit {
 func DrawGraph(gitHistory []GitCommit) (tuiGraph []string) {
 
 	return
-}
-
-type GitCommit struct {
-	Hash    string   `json:"hash"`
-	Parents []string `json:"parents"`
-	Date    string   `json:"date"`
-	Subject string   `json:"subject"`
 }

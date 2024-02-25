@@ -1,5 +1,5 @@
-- name: Can draw single branch
-  given: [1, 1, 1]
+- case: single branch
+  given: [0, 0, 0]
   want: |
     @
     |
@@ -7,8 +7,8 @@
     |
     @
 
-- name: Can draw two branches
-  given: [1, 1, 1]
+- case: two branches
+  given: [0, 0, 1, 0]
   want: |
     @
     |

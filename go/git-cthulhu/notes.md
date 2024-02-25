@@ -3,3 +3,13 @@
 ```
 git -c log.showSignature=false log --max-count=301 --format="%H %P %at | %s"  --date-order --branches --tags --remotes HEAD
 ```
+
+characters for drawing graph:
+
+```
+   │ │ │
+ ╭─O─╯─╯─╮
+         │
+
+ ╭╮╯╰│─
+```
