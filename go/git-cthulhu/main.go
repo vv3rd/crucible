@@ -16,7 +16,7 @@ type GitCommit struct {
 }
 
 func main() {
-	commits := ReadGitHistory("./")
+	commits := ReadGitHistory(".")
 	x, _ := json.Marshal(commits)
 	fmt.Printf("%v\n", string(x))
 }

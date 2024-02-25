@@ -1,5 +1,5 @@
 - case: single branch
-  given: [0, 0, 0]
+  given: ["a", "a", "a"]
   want: |
     @
     |
@@ -8,10 +8,21 @@
     @
 
 - case: two branches
-  given: [0, 0, 1, 0]
+  given: ["a", "a", "b", "a"]
   want: |
     @
     |
+    | @
+    | |
+    @ |
+    | |
+    @─╯
+
+- case: two way merge
+  given: ["a", "a", "b", "a+b"]
+  want: |
+    @─╮
+    | |
     | @
     | |
     @ |

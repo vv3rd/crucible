@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -13,15 +14,15 @@ import (
 )
 
 type YamlTestCase struct {
-	Name  string `json:"case"`
-	Given []int  `json:"given"`
-	Want  string `json:"want"`
+	Case  string   `json:"case"`
+	Given []string `json:"given"`
+	Want  string   `json:"want"`
 }
 
 type TestCase struct {
-	Name  string
-	Given []GitCommit
-	Want  []string
+	Name  string      `json:"name"`
+	Given []GitCommit `json:"given"`
+	Want  []string    `json:"want"`
 }
 
 func TestDrawGraph(t *testing.T) {
@@ -31,10 +32,17 @@ func TestDrawGraph(t *testing.T) {
 
 	for i, c := range cases {
 		tests[i] = TestCase{
-			Name:  c.Name,
+			Name:  c.Case,
 			Given: fakeGitHistory(c.Given...),
 			Want:  strings.Split(c.Want, "\n"),
 		}
+	}
+
+	// if true {
+	if false {
+		x, _ := json.MarshalIndent(tests, "", "    ")
+		fmt.Printf("%v\n", string(x))
+
 	}
 
 	for _, tc := range tests {
@@ -63,27 +71,50 @@ func readTestYaml() []YamlTestCase {
 	return cases
 }
 
-func fakeGitHistory(commits ...int) []GitCommit {
+func fakeGitHistory(commits ...string) []GitCommit {
 	history := make([]GitCommit, 0)
-	lastHashInBranch := make(map[int]string)
+	lastHashInBranch := make(map[string]string)
 
 	count := 0
+	trunkIdx := commits[0]
 
 	history = append(history, GitCommit{
 		Hash:    strings.Repeat(fmt.Sprintf("%d", count), 6),
 		Parents: []string{},
 	})
-	lastHashInBranch[0] = history[0].Hash
+	lastHashInBranch[trunkIdx] = history[0].Hash
 
-	for _, commitBranchIdx := range commits {
+	for _, branchIdx := range commits {
 		count += 1
 		hash := strings.Repeat(fmt.Sprintf("%d", count), 6)
-		last := lastHashInBranch[commitBranchIdx]
-		lastHashInBranch[commitBranchIdx] = hash
-		history = append(history, GitCommit{
-			Hash:    hash,
-			Parents: []string{last},
-		})
+		if strings.Contains(branchIdx, "+") {
+
+			parts := strings.Split(branchIdx, "+")
+			branchA := parts[0]
+			branchB := parts[1]
+
+			parentA := lastHashInBranch[branchA]
+			parentB := lastHashInBranch[branchB]
+
+			lastHashInBranch[branchA] = hash
+			lastHashInBranch[branchB] = hash
+
+			history = append(history, GitCommit{
+				Hash:    hash,
+				Parents: []string{parentA, parentB},
+			})
+
+		} else {
+
+			// FIXME: can be "" if it's a new branchIdx
+			parent := lastHashInBranch[branchIdx]
+			lastHashInBranch[branchIdx] = hash
+
+			history = append(history, GitCommit{
+				Hash:    hash,
+				Parents: []string{parent},
+			})
+		}
 	}
 
 	slices.Reverse(history)
