@@ -1,0 +1,19 @@
+- name: Can draw single branch
+  given: [1, 1, 1]
+  want: |
+    @
+    |
+    @
+    |
+    @
+
+- name: Can draw two branches
+  given: [1, 1, 1]
+  want: |
+    @
+    |
+    | @
+    | |
+    @ |
+    | |
+    @─╯
