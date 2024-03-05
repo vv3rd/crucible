@@ -19,6 +19,7 @@ func main() {
 	commits := ReadGitHistory(".")
 	x, _ := json.Marshal(commits)
 	fmt.Printf("%v\n", string(x))
+
 }
 
 func ReadGitHistory(repo string) []GitCommit {
@@ -69,5 +70,5 @@ func ReadGitHistory(repo string) []GitCommit {
 
 func DrawGraph(gitHistory []GitCommit) (tuiGraph []string) {
 
-	return
+	return []string{"@", "|", "@", "|", "@"}
 }
