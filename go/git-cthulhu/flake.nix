@@ -1,28 +1,28 @@
 {
-  inputs =
-  {
+  inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs }: 
-  let
-    system = "x86_64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
-  in
-  {
-    devShells.${system}.default = pkgs.mkShell 
+  outputs = { nixpkgs, utils, ... }: utils.lib.eachDefaultSystem (system:
+    let
+      pkgs = import nixpkgs { inherit system; };
+    in
     {
-      packages = with pkgs; [
-        go
-        gopls
-        entr
-        just
-      ];
+      devShell = pkgs.mkShell
+        {
+          packages = with pkgs; [
+            go
+            gopls
+            gotools
+            entr
+            just
+          ];
 
-      shellHook = ''
-        export GOPATH="$XDG_DATA_HOME"/go
-        go version | ${pkgs.cowsay}/bin/cowsay | ${pkgs.lolcat}/bin/lolcat
-      '';
-    };
-  };
+          shellHook = ''
+            export GOPATH="$XDG_DATA_HOME"/go
+            go version | ${pkgs.cowsay}/bin/cowsay | ${pkgs.lolcat}/bin/lolcat
+          '';
+        };
+    });
 }
