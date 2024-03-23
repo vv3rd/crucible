@@ -21,13 +21,7 @@ func TestDrawGraph(t *testing.T) {
 
 	tests := readTestYaml()
 
-	// if true {
-	if false {
-		x, err := json.MarshalIndent(tests, "", "    ")
-		check(err)
-		fmt.Printf("%v\n", string(x))
-
-	}
+	debug(tests)
 
 	for _, tc := range tests {
 		t.Run(tc.Case, func(t *testing.T) {
@@ -36,6 +30,12 @@ func TestDrawGraph(t *testing.T) {
 			assert.DeepEqual(t, got, want)
 		})
 	}
+}
+
+func debug[T any](tests T) {
+	x, err := json.MarshalIndent(tests, "", "    ")
+	check(err)
+	fmt.Printf("%v\n", string(x))
 }
 
 func listFrom(want string) []string {
