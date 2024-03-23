@@ -19,6 +19,15 @@ type TestCase struct {
 func TestDrawGraph(t *testing.T) {
 	tests := readTestCases("./tests/DrawGraph.yaml")
 
+	for i := range tests {
+		test := &tests[i]
+		test.Given = append(test.Given, GitCommit{Parents: []string{}})
+		for j := range test.Given {
+			commit := &test.Given[j]
+			commit.Hash = fmt.Sprintf("%d", len(test.Given)-j)
+		}
+	}
+
 	debug(tests)
 
 	for _, tc := range tests {
@@ -48,10 +57,5 @@ func readTestCases(filePath string) []TestCase {
 	textBytes, err := io.ReadAll(file)
 	check(err)
 	yaml.Unmarshal(textBytes, &cases)
-
-	for i := range cases {
-		cases[i].Given = append(cases[i].Given, GitCommit{Hash: "1", Parents: []string{}})
-	}
-
 	return cases
 }

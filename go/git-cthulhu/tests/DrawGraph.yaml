@@ -1,24 +1,15 @@
 - case: single branch
-  given: 
-    - hash: 3
-      parents: [2]
-    - hash: 2
-      parents: [1]
   want:
     - "@"
     - "|"
     - "@"
     - "|"
     - "@"
+  given: 
+    - parents: [2]
+    - parents: [1]
 
 - case: two branches
-  given: 
-    - hash: 4
-      parents: [2]
-    - hash: 3
-      parents: [1]
-    - hash: 2
-      parents: [1]
   want: 
     - "@  "
     - "|  "
@@ -27,15 +18,12 @@
     - "@ |"
     - "| |"
     - "@─╯"
+  given: 
+    - parents: [2]
+    - parents: [1]
+    - parents: [1]
 
 - case: two way merge
-  given: 
-    - hash: 4
-      parents: [2, 3]
-    - hash: 3
-      parents: [1]
-    - hash: 2
-      parents: [1]
   want: 
     - "@─╮"
     - "| |"
@@ -44,6 +32,10 @@
     - "@ |"
     - "| |"
     - "@─╯"
+  given: 
+    - parents: [2, 3]
+    - parents: [1]
+    - parents: [1]
 
 - case: three branches should be layed out to minimize horizontal lines length
   want: 
@@ -55,9 +47,55 @@
     - "| | |"
     - "╰─@─╯"
   given: 
-    - hash: 4
-      parents: [1]
-    - hash: 3
-      parents: [1]
-    - hash: 2
-      parents: [1]
+    - parents: [1]
+    - parents: [1]
+    - parents: [1]
+
+- case: 1 branches should be layed out to avoid intersections of h8l and v6l lines
+  want: 
+    - "    @───╮" # 7
+    - "    |   |"
+    - "    @─╮ |" # 6
+    - "    | | |"
+    - "    | | @" # 5
+    - "    | | |"
+    - "  @ | | |" # 4
+    - "  | | | |"
+    - "  | | @ |" # 3
+    - "  | | | |"
+    - "@ | | | |" # 2
+    - "| | | | |"
+    - "╰─╰─@─╯─╯" # 1
+  given:
+    - parents: [5,6]
+    - parents: [1,3]
+    - parents: [1]
+    - parents: [1]
+    - parents: [1]
+    - parents: [1]
+
+- case: 2 branches should be layed out to avoid intersections of h and v lines
+  want:
+    - "    @───╮" # 8
+    - "    |   |"
+    - "╭───@   |" # 7
+    - "|   |   |"
+    - "| ╭─@   |" # 6
+    - "| | |   |"
+    - "| | @───╮" # 5
+    - "| | |   |"
+    - "| | |   @" # 4
+    - "| | |   |"
+    - "| | @─╮ |" # 3
+    - "| | | | |"
+    - "| | | @ |" # 2
+    - "| | | | |"
+    - "╰─╰─@─╯─╯" # 1
+  given: 
+    - parents: [4,7]
+    - parents: [1,6]
+    - parents: [1,5]
+    - parents: [3,4]
+    - parents: [1]
+    - parents: [1,2]
+    - parents: [1]
