@@ -2,10 +2,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     utils.url = "github:numtide/flake-utils";
-    tools.url = "github:vv3rd/tools";
   };
 
-  outputs = { nixpkgs, utils, tools, ... }: utils.lib.eachDefaultSystem (system:
+  outputs = { nixpkgs, utils, ... }: utils.lib.eachDefaultSystem (system:
     let
       pkgs = import nixpkgs { inherit system; };
       npmrc = pkgs.writeTextFile {
