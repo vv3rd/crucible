@@ -7,27 +7,24 @@ import (
 	"gotest.tools/v3/assert"
 	"io"
 	"os"
-	"strings"
 	"testing"
 )
 
 type TestCase struct {
 	Case  string      `json:"name"`
 	Given []GitCommit `json:"given"`
-	Want  string      `json:"want"`
+	Want  []string    `json:"want"`
 }
 
 func TestDrawGraph(t *testing.T) {
-
-	tests := readTestYaml()
+	tests := readTestCases("./tests/DrawGraph.yaml")
 
 	debug(tests)
 
 	for _, tc := range tests {
 		t.Run(tc.Case, func(t *testing.T) {
 			got := DrawGraph(tc.Given)
-			want := listFrom(tc.Want)
-			assert.DeepEqual(t, got, want)
+			assert.DeepEqual(t, got, tc.Want)
 		})
 	}
 }
@@ -38,22 +35,23 @@ func debug[T any](tests T) {
 	fmt.Printf("%v\n", string(x))
 }
 
-func listFrom(want string) []string {
-	return strings.Split(strings.TrimSpace(want), "\n")
-}
-
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
-func readTestYaml() []TestCase {
+func readTestCases(filePath string) []TestCase {
 	var cases []TestCase
-	file, err := os.Open("./tests/DrawGraph.yaml")
+	file, err := os.Open(filePath)
 	check(err)
 	textBytes, err := io.ReadAll(file)
 	check(err)
 	yaml.Unmarshal(textBytes, &cases)
+
+	for i := range cases {
+		cases[i].Given = append(cases[i].Given, GitCommit{Hash: "1", Parents: []string{}})
+	}
+
 	return cases
 }

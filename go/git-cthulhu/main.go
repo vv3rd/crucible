@@ -70,5 +70,5 @@ func ReadGitHistory(repo string) []GitCommit {
 
 func DrawGraph(gitHistory []GitCommit) (tuiGraph []string) {
 
-	return []string{"@", "|", "@", "|", "@"}
+	return []string{}
 }

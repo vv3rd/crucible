@@ -4,14 +4,12 @@
       parents: [2]
     - hash: 2
       parents: [1]
-    - hash: 1
-      parents: []
-  want: |
-    @
-    |
-    @
-    |
-    @
+  want:
+    - "@"
+    - "|"
+    - "@"
+    - "|"
+    - "@"
 
 - case: two branches
   given: 
@@ -21,17 +19,14 @@
       parents: [1]
     - hash: 2
       parents: [1]
-    - hash: 1
-      parents: []
-
-  want: |
-    @
-    |
-    | @
-    | |
-    @ |
-    | |
-    @─╯
+  want: 
+    - "@  "
+    - "|  "
+    - "| @"
+    - "| |"
+    - "@ |"
+    - "| |"
+    - "@─╯"
 
 - case: two way merge
   given: 
@@ -41,13 +36,28 @@
       parents: [1]
     - hash: 2
       parents: [1]
-    - hash: 1
-      parents: []
-  want: |
-    @─╮
-    | |
-    | @
-    | |
-    @ |
-    | |
-    @─╯
+  want: 
+    - "@─╮"
+    - "| |"
+    - "| @"
+    - "| |"
+    - "@ |"
+    - "| |"
+    - "@─╯"
+
+- case: three branches should be layed out to minimize horizontal lines length
+  want: 
+    - "  @  "
+    - "  |  "
+    - "  | @"
+    - "  | |"
+    - "@ | |"
+    - "| | |"
+    - "╰─@─╯"
+  given: 
+    - hash: 4
+      parents: [1]
+    - hash: 3
+      parents: [1]
+    - hash: 2
+      parents: [1]
