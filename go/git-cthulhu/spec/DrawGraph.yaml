@@ -1,18 +1,23 @@
 # "given" is a model of git history starging with latest commit;
 
 - case: (1) single branch
+  given:
+    - parents: [2] # 3
+    - parents: [1] # 2
+    - parents: []  # 1
   want:
     - "@"
     - "│"
     - "@"
     - "│"
     - "@"
-  given: 
-    - parents: [2] # 3
-    - parents: [1] # 2
-    - parents: []  # 1
 
 - case: (2) two branches
+  given:
+    - parents: [2] # 4
+    - parents: [1] # 3
+    - parents: [1] # 2
+    - parents: []  # 1
   want: 
     - "@  "
     - "│  "
@@ -21,13 +26,13 @@
     - "@ │"
     - "│ │"
     - "@─╯"
-  given: 
-    - parents: [2] # 4
-    - parents: [1] # 3
-    - parents: [1] # 2
-    - parents: []  # 1
 
 - case: (3) two way merge
+  given:
+    - parents: [3,2] # 4
+    - parents: [1]   # 3
+    - parents: [1]   # 2
+    - parents: []    # 1
   want: 
     - "@─╮"
     - "│ │"
@@ -36,13 +41,13 @@
     - "@ │"
     - "│ │"
     - "@─╯"
-  given: 
-    - parents: [3,2] # 4
-    - parents: [1]   # 3
-    - parents: [1]   # 2
-    - parents: []    # 1
 
 - case: (4) three branches
+  given:
+    - parents: [1] # 4
+    - parents: [1] # 3
+    - parents: [1] # 2
+    - parents: []  # 1
   want: 
     - "@    "
     - "│    "
@@ -51,13 +56,13 @@
     - "│ │ @"
     - "│ │ │"
     - "@─╯─╯"
-  given: 
-    - parents: [1] # 4
-    - parents: [1] # 3
-    - parents: [1] # 2
-    - parents: []  # 1
 
 - case: (5) this thing
+  given:
+    - parents: [3,2] # 4
+    - parents: [1,0] # 3
+    - parents: [0]   # 2
+    - parents: [0]   # 1
   want: 
     - "@─╮  " # 4
     - "│ │  "
@@ -67,13 +72,17 @@
     - "│ │ │"
     - "│ │ @" # 1
     - "│ │ │"
-  given:
-    - parents: [3,2] # 4
-    - parents: [1,0] # 3
-    - parents: [0]   # 2
-    - parents: [0]   # 1
 
 - case: (6) this thing
+  given:
+    - parents: [7,2] # 8
+    - parents: [5,3] # 7
+    - parents: [0]   # 6
+    - parents: [3,2] # 5
+    - parents: [3]   # 4
+    - parents: [0]   # 3
+    - parents: [1,0] # 2
+    - parents: [0]   # 1
   want:
     - "@─╮    " # 8
     - "│ │    "
@@ -91,13 +100,4 @@
     - "│ │ │ │"
     - "│ │ @ │" # 1
     - "│ │ │ │"
-  given: 
-    - parents: [7,2] # 8
-    - parents: [5,3] # 7
-    - parents: [0]   # 6
-    - parents: [3,2] # 5
-    - parents: [3]   # 4
-    - parents: [0]   # 3
-    - parents: [1,0] # 2
-    - parents: [0]   # 1
 
