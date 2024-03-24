@@ -23,7 +23,6 @@ func TestDrawGraph(t *testing.T) {
 
 	for i := range tests {
 		test := &tests[i]
-		test.Given = append(test.Given, GitCommit{Parents: []string{}})
 		for j := range test.Given {
 			commit := &test.Given[j]
 			commit.Hash = fmt.Sprintf("%d", len(test.Given)-j)
