@@ -1,13 +1,13 @@
 import { test, expect, describe } from "bun:test";
 import * as yaml from "yaml";
-import { DrawGraph, GitCommit } from "./main";
+import { DrawGraph, Git } from "./main";
 
 const specFile = "../spec/DrawGraph.yaml";
 
 type TestCase = {
   case: string;
   want: string[];
-  given: Pick<GitCommit, "parents">[];
+  given: Pick<Git.Commit, "parents">[];
 };
 
 describe("DrawGraph()", async () => {
