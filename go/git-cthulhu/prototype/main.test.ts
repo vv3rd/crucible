@@ -1,5 +1,23 @@
-import { test, expect } from "bun:test";
+import { test, expect, describe } from "bun:test";
+import * as yaml from "yaml";
+import { DrawGraph, GitCommit } from "./main";
 
-test("DrawGraph()", () => {
+const specFile = "../spec/DrawGraph.yaml";
+
+type TestCase = {
+  case: string;
+  want: string[];
+  given: Pick<GitCommit, "parents">[];
+};
+
+describe("DrawGraph()", async () => {
+  const specs: TestCase[] = yaml.parse(await Bun.file(specFile).text());
+
+  for (const spec of specs) {
+    test(spec.case, () => {
+      expect(DrawGraph({ commits: []})).toEqual(spec.want);
+    });
+  }
+
   expect(true);
 });

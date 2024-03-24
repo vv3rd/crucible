@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+const specFile = "./spec/DrawGraph.yaml"
+
 type TestCase struct {
 	Case  string      `json:"name"`
 	Given []GitCommit `json:"given"`
@@ -17,7 +19,7 @@ type TestCase struct {
 }
 
 func TestDrawGraph(t *testing.T) {
-	tests := readTestCases("./tests/DrawGraph.yaml")
+	tests := readTestCases(specFile)
 
 	for i := range tests {
 		test := &tests[i]

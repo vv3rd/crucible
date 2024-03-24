@@ -1,6 +1,6 @@
 type CommitHash = string;
 
-type GitCommit = {
+export type GitCommit = {
   hash: CommitHash;
   parents: CommitHash[];
 };
@@ -11,6 +11,10 @@ type GitHistory = {
 
 export function DrawGraph(history: GitHistory): string[] {
   const { commits } = history;
+
+  for (const commit of commits) {
+    
+  }
 
   return []
 }

@@ -37,7 +37,7 @@
         shellHook = ''
           export PATH="$PWD/node_modules/.bin:$PATH"
           export NPM_CONFIG_USERCONFIG="${npmrc}/npmrc"
-          export GOPATH="$XDG_DATA_HOME"/go
+          export GOPATH="$XDG_DATA_HOME/go"
         '';
       };
     });
