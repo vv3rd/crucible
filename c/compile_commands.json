@@ -1,0 +1,14 @@
+[
+  {
+    "arguments": [
+      "/nix/store/i6zjqpawh725z1lyg3alglzlabnzbjx7-gcc-wrapper-12.3.0/bin/gcc",
+      "-c",
+      "-o",
+      "main",
+      "main.c"
+    ],
+    "directory": "/home/odmin/Work/projects/c",
+    "file": "/home/odmin/Work/projects/c/main.c",
+    "output": "/home/odmin/Work/projects/c/main"
+  }
+]
