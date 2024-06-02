@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@tsconfig/strictest": "^2.0.5",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
   }
