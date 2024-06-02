@@ -18,6 +18,4 @@ describe("DrawGraph()", async () => {
       expect(DrawGraph({ commits: []})).toEqual(spec.want);
     });
   }
-
-  expect(true);
 });

@@ -24,6 +24,7 @@ export namespace Drawing {
     BranchStart,
     BranchEnd,
     Emptyness,
+    CommitNode,
   }
 
   type AnyColumn = {
@@ -38,6 +39,8 @@ export namespace Drawing {
   } | {
     type: ColumnType.BranchEnd
     turn: LineTurn
+  } | {
+    type: ColumnType.CommitNode
   })
 
   export type Row = {
@@ -74,14 +77,14 @@ export function DrawGraph(history: Git.History): string[] {
   hanging[0] = commits[0];
 
   for (let i = 1; i < commits.length; i += 1) {
-    const commit = commits[i];
-    const children = getChildrenOf(commit);
+    const thisCommit = commits[i];
+    const children = getChildrenOf(thisCommit);
 
     const commitIsParent = children.length > 0;
     const commitIsHeadOfUmergedBranch = !commitIsParent
-    const commitIsMerge = commit.parents.length === 2
+    const commitIsMerge = thisCommit.parents.length === 2
     const commitIsFirst = commits.length - 1 === i;
-    const commitIsDangling = commit.parents.length === 0 && !commitIsFirst
+    const commitIsDangling = thisCommit.parents.length === 0 && !commitIsFirst
 
     if (commitIsParent) {
     }
@@ -90,7 +93,7 @@ export function DrawGraph(history: Git.History): string[] {
       if (commitIsDangling) {
         throw new Error("Do not know how to draw what appears to be a dangling commit")
       }
-      if (commit.parents.length === 1) {
+      if (thisCommit.parents.length === 1) {
 
       }
     }
@@ -99,7 +102,6 @@ export function DrawGraph(history: Git.History): string[] {
   return [];
 
   function getChildrenOf(commit: Git.Commit) {
-    return hanging.filter(({ parents }) => parents.includes(commit.hash)
-    );
+    return hanging.filter(({ parents }) => parents.includes(commit.hash)).map((commit, index) => ({ commit, index }));
   }
 }
