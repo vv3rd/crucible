@@ -1,10 +1,12 @@
 { pkgs ? import <nixpkgs> { } }: pkgs.mkShell
 {
   packages = with pkgs; [
+    man-pages
+    man-pages-posix
     gcc
     bear
     clang-tools
-    man-pages
-    man-pages-posix
+    clang
+    pkg-config
   ];
 }
