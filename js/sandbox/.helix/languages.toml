@@ -1,0 +1,12 @@
+[[language]]
+language-servers = ["ts"]
+name = "javascript"
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "{}"] }
+indent = { tab-width = 4, unit = "\t" }
+
+[[language]]
+language-servers = ["ts"]
+name = "typescript"
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "{}"] }
+indent = { tab-width = 4, unit = "\t" }
+
