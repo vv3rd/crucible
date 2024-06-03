@@ -1,28 +1,28 @@
 import { memoLast } from "./memoLast";
 import { doNothing, runOnce } from "./utils";
 
-type FormReducer<TValues> = (state: FormState<TValues>, msg: FormMsg) => FormState<TValues>;
-
-export function createFormReducer<TFields extends FieldsObject>(
+export function createFormReducer<TFields extends Fields>(
 	options: FormOptions<TFields>,
-): FormReducer<InferFieldsValues<TFields>> {
+): FormReducer<InferValues<TFields>> {
 	const { fields: topFields, validate = () => ({}) } = options;
 
 	const memoValidate = memoLast(validate);
+
 	// TODO: deeply combine fields reducers
 	throw new Error("not implemented");
 
-	function deeplyCombineFieldReducerFactories<F extends Fields>(
-		fields: F,
-		fieldGetter: (topFields: TFields) => any,
-		fieldsName: string,
-	) {}
+	function createReducerObject() {
+		Object.fromEntries(Object.entries(topFields).map(([name, factory]) => {
+			factory(name, value => memoValidate)
+			return []
+		}))
+	}
 }
 
 export function createFieldReducer<TValue>(
 	fieldName: string,
 	defaultValue: TValue,
-	validaet: ValidationFn<TValue> = doNothing,
+	validate: ValidationFn<TValue> = doNothing,
 ) {
 	const defaultState: FieldState<TValue> = {
 		name: fieldName,
@@ -36,7 +36,7 @@ export function createFieldReducer<TValue>(
 		wasBlurredOnce: false,
 	};
 
-	const reduceChange = createChangeReducer(validaet);
+	const reduceChange = createChangeReducer(validate);
 
 	const fieldReducer: FieldReducer<TValue> = (field = defaultState, msg) => {
 		if (FormMsg.match(msg)) {
@@ -209,28 +209,29 @@ interface FormAPI<_TFields> {
 	submit: () => void;
 }
 
+type FormReducer<TValues> = (state: FormState<TValues>, msg: FormMsg) => FormState<TValues>;
+
 type FieldReducer<TValue> = (
 	state: FieldState<TValue> | undefined,
 	msg: FieldMsg<TValue> | FormMsg,
 ) => FieldState<TValue>;
 
-type FieldReducerFactory<TValue = any> = (
+type FieldReducerFactory<TValue> = (
 	fieldName: string,
 	validate: ValidationFn<TValue> | undefined,
 ) => FieldReducer<TValue>;
 
-type FieldsObject = { readonly [key: string]: Fields };
-type FieldsArray = readonly Fields[];
-type FieldsCollection = FieldsObject | FieldsArray;
-type Fields = FieldReducerFactory | FieldsCollection;
+type Fields = {
+	readonly [key: string]: FieldReducerFactory<unknown>;
+};
 
-type InferFieldsValues<T> = T extends FieldReducerFactory<infer TValue>
-	? InferFieldsValues<TValue>
-	: T extends FieldsCollection
-		? { [K in keyof T]: InferFieldsValues<T[K]> }
-		: T;
+type InferValues<F> = F extends FieldReducerFactory<infer T>
+	? T
+	: F extends Fields
+		? { readonly [K in keyof F]: InferValues<F[K]> }
+		: F;
 
-interface FormOptions<TFields extends Fields, TValues = InferFieldsValues<TFields>> {
+interface FormOptions<TFields extends Fields, TValues = InferValues<TFields>> {
 	fields: TFields;
 	onSubmit: (values: TValues, formApi: FormAPI<TValues>) => any | Promise<any>;
 	onSubmitInvalid?: (values: TValues, formApi: FormAPI<TValues>) => void;
