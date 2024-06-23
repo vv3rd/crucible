@@ -33,7 +33,7 @@ function createMemoLast(defaultEqual: AreArgsEqual) {
 		let lastArgs: Parameters<Fn>;
 		let lastResult: ReturnType<Fn>;
 
-		return function memoizedFunction(
+		function memoizedFunction(
 			this: ThisParameterType<Fn>,
 			...args: Parameters<Fn>
 		): ReturnType<Fn> {
@@ -45,7 +45,13 @@ function createMemoLast(defaultEqual: AreArgsEqual) {
 			}
 
 			return lastResult;
-		} as Fn;
+		}
+
+		memoizedFunction.getLastResult = () => lastResult;
+		memoizedFunction.getLastThis = () => lastThis;
+		memoizedFunction.getLastArgs = () => lastArgs;
+
+		return Object.assign(memoizedFunction, fn);
 	};
 }
 

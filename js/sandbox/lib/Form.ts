@@ -1,82 +1,147 @@
 import { memoLast } from "./memoLast";
 import { doNothing, runOnce } from "./utils";
+import { combineReducers, Reducer } from "redux";
 
-export function createFormReducer<TFields extends Fields>(
+const INIT_ACTION = { type: "__init__" };
+
+export function createFormReducer<TFields extends FieldsConfig>(
 	options: FormOptions<TFields>,
 ): FormReducer<InferValues<TFields>> {
-	const { fields: topFields, validate = () => ({}) } = options;
-
-	const memoValidate = memoLast(validate);
-
-	// TODO: deeply combine fields reducers
-	throw new Error("not implemented");
-
-	function createReducerObject() {
-		Object.fromEntries(Object.entries(topFields).map(([name, factory]) => {
-			factory(name, value => memoValidate)
-			return []
-		}))
-	}
-}
-
-export function createFieldReducer<TValue>(
-	fieldName: string,
-	defaultValue: TValue,
-	validate: ValidationFn<TValue> = doNothing,
-) {
-	const defaultState: FieldState<TValue> = {
-		name: fieldName,
-		value: defaultValue,
-		task: doNothing,
-		message: undefined,
-		isActive: false,
-		isValidating: false,
-		wasModifiedOnce: false,
-		wasFocusedOnce: false,
-		wasBlurredOnce: false,
-	};
-
-	const reduceChange = createChangeReducer(validate);
-
-	const fieldReducer: FieldReducer<TValue> = (field = defaultState, msg) => {
-		if (FormMsg.match(msg)) {
-			switch (msg.type) {
-				case FormMsgT.Reset:
-					return defaultState;
-			}
-			return field;
-		}
-		const Msg = FieldMsgT;
-		if (msg.name === field.name) {
-			switch (msg.type) {
-				case Msg.Changed:
-					return reduceChange(field, msg);
-				case Msg.Focused:
-					return { ...field, wasFocusedOnce: true, isActive: true };
-				case Msg.Blurred:
-					return { ...field, wasBlurredOnce: true, isActive: false };
-				case Msg.SetState:
-					return msg.payload;
-				case Msg.AsyncValidationInit:
-					return { ...field, isValidating: true };
-				case Msg.AsyncValidationDone:
-					return { ...field, isValidating: false, message: msg.payload };
-				case Msg.AsyncValidationFail:
-					return { ...field, isValidating: false };
-			}
+	type TValues = InferValues<TFields>;
+	const {
+		fields: fieldsConfig,
+		validate: givenValidateFn = doNothing,
+		//
+	} = options;
+	const validate = memoLast(givenValidateFn);
+	const validateField = (fieldName: keyof TValues) => {
+		const validatedForm = validate.getLastResult();
+		if (validatedForm instanceof Promise) {
+			const result = validatedForm.then((validatedForm) => validatedForm?.[fieldName]);
+			return result;
 		} else {
-			switch (msg.type) {
-				case Msg.Focused:
-				case Msg.Changed:
-					return { ...field, isActive: false };
-			}
+			const result = validatedForm?.[fieldName];
+			return result;
 		}
-
-		return field;
 	};
 
-	return fieldReducer;
+	const reduceFields = combineReducers(
+		Object.fromEntries(
+			Object.entries(fieldsConfig).map((entry) => {
+				const [fieldName, reducerFactory] = entry;
+				const reducer = reducerFactory(() => validateField(fieldName))(fieldName);
+				return [fieldName, reducer];
+			}),
+		),
+	) as Reducer<FormFieldsState<TValues>, any>;
+
+	const initialFormState: FormState<TValues> = {
+		fields: reduceFields(undefined, INIT_ACTION),
+		task: doNothing,
+		canSubmit: undefined,
+		submitting: false,
+		submissionAttempts: 0,
+	};
+
+	const formReducer: FormReducer<TValues> = (state = initialFormState, msg) => {
+		switch (msg.type) {
+			case FormMsgT.Reset:
+				return initialFormState;
+			case FormMsgT.SubmissionInit:
+				return { ...state, submitting: true, submissionAttempts: state.submissionAttempts + 1 };
+			case FormMsgT.SubmissionDone:
+				return { ...state, submitting: false };
+		}
+
+		ReducingFields: if (FieldMsg.match(msg)) {
+			const values = Object.fromEntries(
+				Object.values(state.fields).map((state) => {
+					return (state as FieldState<any>).value;
+				}),
+			) as TValues;
+
+			validate(values);
+
+			const newFields = reduceFields(state.fields, msg);
+			if (newFields === state.fields) {
+				break ReducingFields;
+			}
+
+			const task: TaskFn = runOnce((taskApi) => {
+				const results = Object.values(newFields).map((field) => field.task(taskApi));
+				if (results.some((result) => result instanceof Promise)) {
+					return Promise.allSettled(results).then(() => void 0);
+				} else {
+					return;
+				}
+			});
+
+			return { ...state, task, fields: newFields };
+		}
+
+		return state;
+	};
+
+	return formReducer;
 }
+
+export const createFieldReducer =
+	<TValue>(defaultValue: TValue) =>
+	(validate: ValidationFn<TValue> = doNothing) =>
+	(fieldName: string) => {
+		const defaultState: FieldState<TValue> = {
+			name: fieldName,
+			value: defaultValue,
+			task: doNothing,
+			message: undefined,
+			isActive: false,
+			isValidating: false,
+			wasModifiedOnce: false,
+			wasFocusedOnce: false,
+			wasBlurredOnce: false,
+		};
+
+		const reduceChange = createChangeReducer(validate);
+
+		const fieldReducer: FieldReducer<TValue> = (field = defaultState, msg) => {
+			if (FormMsg.match(msg)) {
+				switch (msg.type) {
+					case FormMsgT.Reset:
+						return defaultState;
+				}
+				return field;
+			}
+			const Msg = FieldMsgT;
+			if (msg.name === field.name) {
+				switch (msg.type) {
+					case Msg.Changed:
+						return reduceChange(field, msg);
+					case Msg.Focused:
+						return { ...field, wasFocusedOnce: true, isActive: true };
+					case Msg.Blurred:
+						return { ...field, wasBlurredOnce: true, isActive: false };
+					case Msg.SetState:
+						return msg.payload;
+					case Msg.AsyncValidationInit:
+						return { ...field, isValidating: true };
+					case Msg.AsyncValidationDone:
+						return { ...field, isValidating: false, message: msg.payload };
+					case Msg.AsyncValidationFail:
+						return { ...field, isValidating: false };
+				}
+			} else {
+				switch (msg.type) {
+					case Msg.Focused:
+					case Msg.Changed:
+						return { ...field, isActive: false };
+				}
+			}
+
+			return field;
+		};
+
+		return fieldReducer;
+	};
 
 function createChangeReducer<TValue>(validate: ValidationFn<TValue> | undefined) {
 	type S = FieldState<TValue>;
@@ -114,7 +179,7 @@ function createValidationReducer<TValue>(validate: ValidationFn<TValue>) {
 function createAsyncValidationTask<TValue>(
 	field: FieldState<TValue>,
 	result: Promise<ValidationMessage>,
-): TaskFn<TValue> {
+): TaskFn {
 	const name = field.name;
 	const Ev = FieldMsgT;
 	return runOnce(async (api) => {
@@ -131,14 +196,14 @@ function createAsyncValidationTask<TValue>(
 type Msg<T, P = {}> = { type: T } & P;
 type MsgPayload<P> = { payload: P };
 
-type TaskFn<V> = (taskApi: TaskAPI<V>) => void | Promise<void>;
-type TaskAPI<V> = {
-	dispatch: (msg: FormMsg | FieldMsg<V>) => void;
+type TaskFn = (taskApi: TaskAPI) => void | Promise<void>;
+type TaskAPI = {
+	dispatch: (msg: FormMsg | FieldMsg<any>) => void;
 };
-
-interface FieldInternals<TValue> {
-	task: TaskFn<TValue>;
+interface WithTask {
+	task: TaskFn;
 }
+
 interface FieldFlags {
 	wasModifiedOnce: boolean;
 	wasFocusedOnce: boolean;
@@ -146,7 +211,7 @@ interface FieldFlags {
 	isValidating: boolean;
 	isActive: boolean;
 }
-interface FieldState<TValue> extends FieldInternals<TValue>, FieldFlags {
+interface FieldState<TValue> extends WithTask, FieldFlags {
 	name: string;
 	value: TValue;
 	message: ValidationMessage;
@@ -190,26 +255,32 @@ type FieldMsg<TValue> = { name: string } & (
 );
 
 type ValidationMessage = undefined | void | string;
-type ValidationFn<TValue> = (value: TValue) => ValidationMessage | Promise<ValidationMessage>;
+type ValidationFn<TValue> = (value: TValue) => util.MaybePromise<ValidationMessage>;
+type FormValidationFn<TValues> = (
+	values: TValues,
+) => util.MaybePromise<void | { [K in keyof TValues]?: ValidationMessage }>;
 
 interface FormFlags {
 	canSubmit: ValidationMessage;
 	submitting: boolean;
 	submissionAttempts: number;
 }
-
-interface FormState<TFields> extends FormFlags {
-	fields: {
-		[K in keyof TFields]: FieldState<TFields[K]>;
-	};
+interface FormState<TFields> extends FormFlags, WithTask {
+	fields: FormFieldsState<TFields>;
 }
+type FormFieldsState<TFields> = {
+	[K in keyof TFields]: FieldState<TFields[K]>;
+};
 
 interface FormAPI<_TFields> {
 	reset: () => void;
 	submit: () => void;
 }
 
-type FormReducer<TValues> = (state: FormState<TValues>, msg: FormMsg) => FormState<TValues>;
+type FormReducer<TValues> = (
+	state: FormState<TValues>,
+	msg: FormMsg | FieldMsg<TValues[keyof TValues]>,
+) => FormState<TValues>;
 
 type FieldReducer<TValue> = (
 	state: FieldState<TValue> | undefined,
@@ -217,25 +288,22 @@ type FieldReducer<TValue> = (
 ) => FieldState<TValue>;
 
 type FieldReducerFactory<TValue> = (
-	fieldName: string,
-	validate: ValidationFn<TValue> | undefined,
-) => FieldReducer<TValue>;
+	validate: ValidationFn<TValue>,
+) => (fieldName: string) => FieldReducer<TValue>;
 
-type Fields = {
+type FieldsConfig = {
 	readonly [key: string]: FieldReducerFactory<unknown>;
 };
 
 type InferValues<F> = F extends FieldReducerFactory<infer T>
 	? T
-	: F extends Fields
+	: F extends FieldsConfig
 		? { readonly [K in keyof F]: InferValues<F[K]> }
 		: F;
 
-interface FormOptions<TFields extends Fields, TValues = InferValues<TFields>> {
+interface FormOptions<TFields extends FieldsConfig, TValues = InferValues<TFields>> {
 	fields: TFields;
-	onSubmit: (values: TValues, formApi: FormAPI<TValues>) => any | Promise<any>;
-	onSubmitInvalid?: (values: TValues, formApi: FormAPI<TValues>) => void;
-	validate?: ValidationFn<TValues>;
+	validate?: FormValidationFn<TValues>;
 }
 
 export {};
@@ -244,4 +312,6 @@ namespace util {
 	export const isArray = Array.isArray;
 
 	export const isFunction = <T>(value: T): value is T & Function => typeof value === "function";
+
+	export type MaybePromise<T> = Promise<T> | T;
 }
