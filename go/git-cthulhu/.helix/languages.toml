@@ -1,0 +1,9 @@
+[[language]]
+language-servers = ["ts"]
+name = "javascript"
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "{}"] }
+
+[[language]]
+language-servers = ["ts"]
+name = "typescript"
+formatter = { command = "biome", args = ["format", "--stdin-file-path", "{}"] }

@@ -1,107 +1,121 @@
-type CommitHash = string;
+export function DrawGraph(history: Git.History): string[] {
+	let { commits } = history;
 
-export namespace Git {
-  export type Hash = string
+	if (commits.length === 0) {
+		throw new Error("Nothing to draw");
+	}
 
-  export type Commit = {
-    hash: CommitHash;
-    parents: CommitHash[];
-  }
+	if (commits.length === 1) {
+		return [Drawing.Gliph.Node];
+	}
 
-  export type History = {
-    commits: Commit[];
-  }
+	let ongoing = new Set<Git.Commit>();
+
+	let drawing = new Array<Drawing.Row>(commits.length);
+
+	ongoing[0] = commits[0];
+
+	for (let i = 1; i < commits.length; i += 1) {
+		let thisCommit = commits[i];
+		let children = getChildrenOf(thisCommit);
+
+		let commitIsParent = children.length > 0;
+		let commitIsHeadOfUmergedBranch = !commitIsParent;
+		let commitIsMerge = thisCommit.parents.length === 2;
+		let commitIsInitial = commits.length - 1 === i;
+		let commitIsDangling = thisCommit.parents.length === 0 && !commitIsInitial;
+
+		if (commitIsParent) {
+			let columns = new Array<Drawing.Column>(ongoing.size);
+		} else if (commitIsHeadOfUmergedBranch) {
+			if (commitIsDangling) {
+				throw new Error(
+					"Don't know how to draw what appears to be a dangling commit",
+				);
+			}
+			if (thisCommit.parents.length === 1) {
+			}
+		}
+
+		if (!commitIsInitial && !commitIsDangling) {
+			ongoing;
+		}
+	}
+
+	return [];
+
+	function getChildrenOf(commit: Git.Commit) {
+		return Array.from(ongoing)
+			.filter(({ parents }) => parents.includes(commit.hash))
+			.map((commit, index) => ({ commit, index }));
+	}
 }
 
 export namespace Drawing {
-  enum LineTurn {
-    Right,
-    Left,
-  }
+	enum LineTurn {
+		Right,
+		Left,
+	}
 
-  enum ColumnType {
-    VerticalEdge,
-    BranchStart,
-    BranchEnd,
-    Emptyness,
-    CommitNode,
-  }
+	enum ColumnType {
+		VerticalEdge,
+		BranchStart,
+		BranchEnd,
+		WhiteSpace,
+		CommitNode,
+	}
 
-  type AnyColumn = {
-    positionIndex: number
-  }
+	type AnyColumn = {
+		positionIndex: number;
+	};
 
-  export type Column = AnyColumn & ({
-    type: ColumnType.VerticalEdge
-  } | {
-    type: ColumnType.BranchStart
-    turn: LineTurn
-  } | {
-    type: ColumnType.BranchEnd
-    turn: LineTurn
-  } | {
-    type: ColumnType.CommitNode
-  })
+	export type Column = AnyColumn &
+		(
+			| {
+					type: ColumnType.VerticalEdge;
+			  }
+			| {
+					type: ColumnType.BranchStart;
+					turn: LineTurn;
+			  }
+			| {
+					type: ColumnType.BranchEnd;
+					turn: LineTurn;
+			  }
+			| {
+					type: ColumnType.CommitNode;
+			  }
+		);
 
-  export type Row = {
-    columns: Array<Column>
-  }
+	export type Row = {
+		columns: Array<Column>;
+	};
 
-  export enum Gliph {
-    Node = "@",
-    EdgeV = "│",
-    EdgeH = "─",
-    TurnTR = "╰",
-    TurnBR = "╭",
-    TurnBL = "╮",
-    TurnTL = "╯",
-  }
+	export enum Gliph {
+		Node = "@",
+		EdgeV = "│",
+		EdgeH = "─",
+		TurnTR = "╰",
+		TurnBR = "╭",
+		TurnBL = "╮",
+		TurnTL = "╯",
+	}
 }
 
+export namespace Git {
+	export type Hash = string;
 
-export function DrawGraph(history: Git.History): string[] {
-  const { commits } = history;
+	export type Commit = {
+		hash: Hash;
+		parents: Hash[];
+	};
 
-  if (commits.length === 0) {
-    throw new Error("Nothing to draw")
-  }
+	export type History = {
+		commits: Commit[];
+	};
 
-  if (commits.length === 1) {
-    return [Drawing.Gliph.Node]
-  }
-
-  const hanging = new Array<Git.Commit>();
-
-  const drawing = new Array<Drawing.Row>(commits.length);
-
-  hanging[0] = commits[0];
-
-  for (let i = 1; i < commits.length; i += 1) {
-    const thisCommit = commits[i];
-    const children = getChildrenOf(thisCommit);
-
-    const commitIsParent = children.length > 0;
-    const commitIsHeadOfUmergedBranch = !commitIsParent
-    const commitIsMerge = thisCommit.parents.length === 2
-    const commitIsFirst = commits.length - 1 === i;
-    const commitIsDangling = thisCommit.parents.length === 0 && !commitIsFirst
-
-    if (commitIsParent) {
-    }
-
-    if (commitIsHeadOfUmergedBranch) {
-      if (commitIsDangling) {
-        throw new Error("Do not know how to draw what appears to be a dangling commit")
-      }
-      if (thisCommit.parents.length === 1) {
-
-      }
-    }
-  }
-
-  return [];
-
-  function getChildrenOf(commit: Git.Commit) {
-    return hanging.filter(({ parents }) => parents.includes(commit.hash)).map((commit, index) => ({ commit, index }));
-  }
+	export type OngoingBranch = {
+		last: Commit;
+		rest: OngoingBranch;
+	};
 }
