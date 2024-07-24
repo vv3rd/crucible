@@ -2,43 +2,40 @@ export function DrawGraph(history: Git.History): string[] {
 	let { commits } = history;
 
 	if (commits.length === 0) {
-		throw new Error("Nothing to draw");
+		throw new Error(NOTHING_TO_DRAW_ERROR);
 	}
 
 	if (commits.length === 1) {
 		return [Drawing.Gliph.Node];
 	}
 
-	let ongoing = new Set<Git.Commit>();
-
+	let ongoing = new Set<Drawing.Branch>();
 	let drawing = new Array<Drawing.Row>(commits.length);
 
-	ongoing[0] = commits[0];
+	ongoing.add({
+		last: commits[0],
+		rest: null,
+	});
 
-	for (let i = 1; i < commits.length; i += 1) {
+	for (let i = 1; i < commits.length - 1; i += 1) {
 		let thisCommit = commits[i];
 		let children = getChildrenOf(thisCommit);
 
 		let commitIsParent = children.length > 0;
 		let commitIsHeadOfUmergedBranch = !commitIsParent;
 		let commitIsMerge = thisCommit.parents.length === 2;
-		let commitIsInitial = commits.length - 1 === i;
-		let commitIsDangling = thisCommit.parents.length === 0 && !commitIsInitial;
+		let commitIsDangling = thisCommit.parents.length === 0;
 
 		if (commitIsParent) {
 			let columns = new Array<Drawing.Column>(ongoing.size);
-		} else if (commitIsHeadOfUmergedBranch) {
-			if (commitIsDangling) {
-				throw new Error(
-					"Don't know how to draw what appears to be a dangling commit",
-				);
-			}
+			// TODO: do something with columns
+			drawing[i] = { columns };
+		} else if (commitIsDangling) {
+			throw new Error(DANGLING_COMMIT_ERROR); // FIXME: figure out how to draw dangling commits
+		} else {
+			// commit is head of unmerged branch
 			if (thisCommit.parents.length === 1) {
 			}
-		}
-
-		if (!commitIsInitial && !commitIsDangling) {
-			ongoing;
 		}
 	}
 
@@ -46,10 +43,14 @@ export function DrawGraph(history: Git.History): string[] {
 
 	function getChildrenOf(commit: Git.Commit) {
 		return Array.from(ongoing)
-			.filter(({ parents }) => parents.includes(commit.hash))
+			.filter(({ last: { parents } }) => parents.includes(commit.hash))
 			.map((commit, index) => ({ commit, index }));
 	}
 }
+
+const NOTHING_TO_DRAW_ERROR = "Nothing to draw";
+const DANGLING_COMMIT_ERROR =
+	"Don't know how to draw what appears to be a dangling commit";
 
 export namespace Drawing {
 	enum LineTurn {
@@ -91,6 +92,11 @@ export namespace Drawing {
 		columns: Array<Column>;
 	};
 
+	export type Branch = {
+		last: Git.Commit;
+		rest: null | Branch;
+	};
+
 	export enum Gliph {
 		Node = "@",
 		EdgeV = "│",
@@ -112,10 +118,5 @@ export namespace Git {
 
 	export type History = {
 		commits: Commit[];
-	};
-
-	export type OngoingBranch = {
-		last: Commit;
-		rest: OngoingBranch;
 	};
 }
