@@ -1,3 +1,26 @@
+import { test, expect } from "bun:test";
+import { doNothing } from "./utils";
+
+test("defineActor", () => {
+	const { reduce: actor, select: selector } = defineActor("hehe", (use) => {
+		const [num, setNum] = use(State(() => 123));
+
+		const [str, setStr] = use(State(""));
+
+		return {
+			str,
+			num,
+			setNum,
+			setStr,
+		};
+	});
+
+	const out = actor();
+	const data = selector(out);
+
+	console.log({ out, data });
+});
+
 /*
 
 
@@ -17,93 +40,152 @@
 
 */
 
-interface UseActor<F extends Fn = Fn> {
-	<S, M extends Msg<any, any>>(actor: Actor<S, M, F>): [S, (msg: M) => void];
-}
+function defineActor<O, T extends string>(
+	tagName: T,
+	runner: Fn<O, [use: UseActor]>,
+) {
+	const TAG = Symbol();
+	type Tagged<D> = { readonly [TAG]: T } & D;
+	type TaggedMsg = Tagged<Msg<any>>;
+	type TaggedArr = Tagged<Array<any>>;
 
-let actorsCount = 0;
-function createActor(runner: Fn<void, [use: UseActor]>) {
-	const key = `actor-${++actorsCount}`;
+	const initialArr: TaggedArr = Object.assign([], { [TAG]: tagName });
+	const initialMsg: TaggedMsg = {
+		path: -1,
+		payload: undefined,
+		[TAG]: tagName,
+	};
 
-	type State = Array<any>;
+	const reduce = (
+		arr = initialArr,
+		msg = initialMsg,
+		exe: Scheduler = doNothing,
+		//
+	) => {
+		let pointer = 0;
+		let changed = new Map<number, any>();
+		const use: UseActor = (actor) => {
+			const here = pointer++;
+			const send = (msg: any): Msg<any> => ({ path: here, payload: msg });
 
-	return (select: AnyFn, dispatch: AnyFn) => {
-		return (state?: State, action?: Msg) => {
-			if (state === undefined) {
-				const state = [];
-				const use: UseActor = (actor) => {
-					const v = actor();
-					state.push(v);
-					return [v, (msg) => {}];
-				};
-				runner(use);
+			const old = arr[here];
+			const initialRun = msg === initialMsg;
+			if (!initialRun && msg.path !== here) {
+				return [old, send];
 			}
+			// will have to resolve injected state here;
+			const neu = actor(old, msg.payload, exe);
+			if (neu !== old) {
+				changed.set(here, neu);
+			}
+			return [neu, send];
 		};
+
+		const out = runner(use);
+
+		if (changed.size > 0) {
+			cache.set(arr, out);
+			arr = arr.slice() as TaggedArr;
+			changed.forEach((val, key) => {
+				arr[key] = val;
+			});
+		}
+		return arr;
+	};
+
+	const cache = new WeakMap<any[], any>();
+	const select = (arr: TaggedArr): O => {
+		const cached = cache.get(arr);
+		if (!cached) {
+			reduce(arr, initialMsg);
+			return cache.get(arr)!;
+		} else {
+			return cached;
+		}
+	};
+
+	return {
+		reduce,
+		select,
 	};
 }
 
-createActor((use) => {
-	const [num, send] = use(State(1));
-});
+function Sync(executor: Cb<[cleanup: void | Cb]>): Actor<boolean, void> {
+	return (executed = false, _, exec) => {
+		if (!executed) {
+			exec?.(executor);
+		}
+		return true;
+	};
+}
 
-type StateUpdate<S> = S | ((current: S) => S);
+function Ref<T>(current: T) {
+	return (_1: { current: T }, _2: never) => ({ current });
+}
 
-const State =
-	<S>(initialState: S) =>
-	(state: S = initialState, msg: Msg<"set", StateUpdate<S>>) => {
-		if (msg.path == "set" && "payload" in msg) {
-			const update = msg.payload;
-			if (update instanceof Function) {
-				return update(state);
+function State<T extends Defined>(initial: T | Lazy<T>) {
+	return (state: T, next?: SetStateUpdate<T>) => {
+		if (state === undefined) {
+			if (initial instanceof Function) {
+				state = initial();
 			} else {
-				return update;
+				state = initial;
 			}
 		}
-		return state;
+		if (next === undefined) {
+			return state;
+		}
+		if (next instanceof Function) {
+			return next(state);
+		} else {
+			return next;
+		}
 	};
+}
+
+type SetStateUpdate<T> = T | ((previous: T) => T);
+type Defined = NonNullable<unknown> | null;
+
+interface UseActor {
+	<S, M>(actor: Actor<S, M>): [S, (msg: M) => Msg<M>];
+}
+
+/*
+
+
+
+
+
+
+
+*/
 
 interface Fn<R = void, A extends any[] = []> {
 	(...args: A): R;
 }
-interface AnyFn extends Fn<any, any> {}
-interface Callback<A = void> extends Fn<void, [input: A]> {}
+interface Cb<A extends any[] = []> extends Fn<void, A> {}
 interface Lazy<T> extends Fn<T> {}
 interface Task<R = void, A extends any[] = []> extends Fn<Promise<R>, A> {}
 
-declare const Tag: unique symbol;
+type ActorPath = string | number;
 
-interface BaseMsg<P extends string = string> {
-	path: P;
+interface Msg<D = void> {
+	readonly path: ActorPath;
+	readonly payload: D;
 }
 
-interface PayloadMsg<P extends string = string, D = void> extends BaseMsg<P> {
-	payload: D;
+interface Actor<T, M, I = T> {
+	(state: NoInfer<T> | I, message?: M, scheduler?: Scheduler): T;
 }
 
-type Msg<P extends string = string, D = void> = void extends D ? BaseMsg<P> : PayloadMsg<P, D>;
-
-type PickMessage<M extends Msg, K extends M["path"]> = Extract<M, BaseMsg<K>>;
-type InferPayload<M extends Msg> = M extends PayloadMsg<string, infer D> ? D : void;
-type InferMethods<M extends Msg> = {
-	[K in M["path"]]: (payload: InferPayload<PickMessage<M, K>>) => PickMessage<M, K>;
-};
-
-type InferMsg<A extends Actor<any, any, any>> = A extends Actor<any, infer T, any> ? T : never;
-
-type InferState<A extends Actor<any, any, any>> = A extends Actor<infer T, any, any> ? T : never;
-
-interface Actor<T, M extends Msg = Msg, F extends Fn = Fn> {
-	(state?: T, message?: M, scheduler?: Scheduler<F>): T;
-}
-
-interface Scheduler<T> {
-	(callback: T): void;
+interface Scheduler {
+	(callback: Fn<void | Cb, []>): void;
 }
 
 interface Disposable {
-	dispose: Callback;
+	dispose: Cb;
 }
 
 interface Observable<T> {
-	observe: Fn<Disposable, [observer: Callback<T>]>;
+	observe: Fn<Disposable, [observer: Cb<[T]>]>;
 }

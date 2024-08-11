@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@tsconfig/strictest": "^2.0.5",
+    "@types/bun": "^1.1.6",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
   },
