@@ -11,6 +11,7 @@
   "devDependencies": {
     "@tsconfig/strictest": "^2.0.5",
     "@types/bun": "^1.1.6",
+    "@types/react": "^18.3.3",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
   },

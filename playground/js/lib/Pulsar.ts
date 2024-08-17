@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { doNothing } from "./utils";
+import type * as React from "react";
 
 test("defineActor", () => {
 	const { reduce: actor, select: selector } = defineActor("hehe", (use) => {
@@ -39,6 +40,59 @@ test("defineActor", () => {
 
 
 */
+
+interface EffectHook {
+	(effect: React.EffectCallback, deps?: React.DependencyList): void;
+}
+
+interface StateHook {
+	<S = undefined>(): [
+		S | undefined,
+		React.Dispatch<React.SetStateAction<S | undefined>>,
+	];
+	<S>(
+		initialState: S | (() => S),
+	): [S, React.Dispatch<React.SetStateAction<S>>];
+}
+
+interface RefHook {
+	<T>(initialValue: T): React.MutableRefObject<T>;
+	<T>(initialValue: T | null): React.RefObject<T>;
+	<T = undefined>(): React.MutableRefObject<T | undefined>;
+}
+
+interface Dispatcher {
+	useEffect: EffectHook;
+	useState: StateHook;
+	useRef: RefHook;
+}
+
+const NO_DISPATCHER_WHATEVER = "";
+const NoDispatcher: Dispatcher = {
+	useEffect: () => {
+		throw new Error(NO_DISPATCHER_WHATEVER);
+	},
+	useState: () => {
+		throw new Error(NO_DISPATCHER_WHATEVER);
+	},
+	useRef: () => {
+		throw new Error(NO_DISPATCHER_WHATEVER);
+	},
+};
+
+const Internals: {
+	dispatcher: Dispatcher;
+} = {
+	dispatcher: NoDispatcher,
+};
+
+const DispatcherFacade = {
+	useEffect: (effecct, deps) => Internals.dispatcher.useEffect(effecct, deps),
+	useState: (init) => Internals.dispatcher.useState(init),
+	useRef: (init) => Internals.dispatcher.useRef(init),
+} as Dispatcher;
+
+const Re = DispatcherFacade;
 
 function defineActor<O, T extends string>(
 	tagName: T,
