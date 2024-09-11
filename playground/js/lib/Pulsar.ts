@@ -67,7 +67,7 @@ interface Dispatcher {
 	useRef: RefHook;
 }
 
-const NO_DISPATCHER_WHATEVER = "";
+const NO_DISPATCHER_WHATEVER = "Aint got a dispatcher";
 const NoDispatcher: Dispatcher = {
 	useEffect: () => {
 		throw new Error(NO_DISPATCHER_WHATEVER);
