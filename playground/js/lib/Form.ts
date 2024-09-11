@@ -60,23 +60,23 @@ export function createFormReducer<TFields extends FieldsConfig>(
 				]),
 				// TODO: is it really TValues?
 			) as TValues;
-			const messages = validateForm(values);
-
-			let formTask: TaskFn | undefined;
-			if (messages instanceof Promise) {
-				formTask = runOnce(async (task) => {
-					try {
-						const payload = await messages;
-						task.dispatch; // TODO: add form async validationn msgs
-					} catch (error) {
-						task.dispatch;
-						throw error;
-					}
-				});
-			}
+			let messages = validateForm(values);
 
 			if (!messages && newFields === state.fields) {
 				return state;
+			}
+
+			let formTask: TaskFn | undefined;
+			if (messages instanceof Promise) {
+				formTask = async ({ dispatch }) => {
+					try {
+						const payload = await messages;
+						dispatch; // TODO: add form async validationn msgs
+					} catch (error) {
+						dispatch;
+						throw error;
+					}
+				};
 			}
 
 			const task: TaskFn = runOnce((taskApi) => {
@@ -91,7 +91,12 @@ export function createFormReducer<TFields extends FieldsConfig>(
 				}
 			});
 
-			return { ...state, messages, task, fields: newFields };
+			return {
+				...state,
+				messages: messages instanceof Promise ? state.messages : messages ?? {},
+				task,
+				fields: newFields,
+			};
 		}
 
 		return state;
@@ -126,28 +131,28 @@ export const createFieldReducer =
 				}
 				return field;
 			}
-			const Msg = FieldMsgType;
+			const mt = FieldMsgType;
 			if (msg.name === field.name) {
 				switch (msg.type) {
-					case Msg.Changed:
+					case mt.Changed:
 						return reduceChange(field, msg);
-					case Msg.Focused:
+					case mt.Focused:
 						return { ...field, wasFocusedOnce: true, isActive: true };
-					case Msg.Blurred:
+					case mt.Blurred:
 						return { ...field, wasBlurredOnce: true, isActive: false };
-					case Msg.SetState:
+					case mt.SetState:
 						return msg.payload;
-					case Msg.AsyncValidationInit:
+					case mt.AsyncValidationInit:
 						return { ...field, isValidating: true };
-					case Msg.AsyncValidationDone:
+					case mt.AsyncValidationDone:
 						return { ...field, isValidating: false, message: msg.payload };
-					case Msg.AsyncValidationFail:
+					case mt.AsyncValidationFail:
 						return { ...field, isValidating: false };
 				}
 			} else {
 				switch (msg.type) {
-					case Msg.Focused:
-					case Msg.Changed:
+					case mt.Focused:
+					case mt.Changed:
 						return { ...field, isActive: false };
 				}
 			}
@@ -198,14 +203,14 @@ function createAsyncValidationTask<TValue>(
 	result: Promise<ValidationMessage>,
 ): TaskFn {
 	const name = field.name;
-	const Msg = FieldMsgType;
-	return runOnce(async (api) => {
-		api.dispatch({ type: Msg.AsyncValidationInit, name });
+	const mt = FieldMsgType;
+	return runOnce(async ({ dispatch }) => {
+		dispatch({ type: mt.AsyncValidationInit, name });
 		try {
 			const payload = await result;
-			api.dispatch({ type: Msg.AsyncValidationDone, name, payload });
+			dispatch({ type: mt.AsyncValidationDone, name, payload });
 		} catch (error) {
-			api.dispatch({ type: Msg.AsyncValidationFail, name });
+			dispatch({ type: mt.AsyncValidationFail, name });
 			throw error;
 		}
 	});
