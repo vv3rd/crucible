@@ -1,7 +1,7 @@
 import { doNothing, runOnce } from "./utils";
 import { combineReducers, Reducer } from "redux";
 
-const { fromEntries, entries } = Object;
+const { fromEntries, entries, assign } = Object;
 
 export function createFormReducer<TFields extends FieldsConfig>(
 	options: FormOptions<TFields>,
@@ -22,17 +22,16 @@ export function createFormReducer<TFields extends FieldsConfig>(
 	) as Reducer<Form.FieldsState<TValues>>;
 
 	const initialFormState: Form.State<TValues> = {
-		fields: reduceFields(undefined, InitAction),
+		fields: reduceFields(undefined, { type: Field.MsgType.Init }),
 		notes: {},
 		task: doNothing,
 		isSubmitting: false,
 		isValidating: false,
-		submissionAttempts: 0,
+		submitAttemt: 0,
 	};
 
-	const formReducer: Form.Reducer<TValues> = (
-		state = initialFormState,
-		msg,
+	const formReducer = (
+		...[state = initialFormState, msg]: Parameters<Form.Reducer<TValues>>
 	): Form.State<TValues> => {
 		switch (msg.type) {
 			case Form.MsgType.Reset:
@@ -41,7 +40,7 @@ export function createFormReducer<TFields extends FieldsConfig>(
 				return {
 					...state,
 					isSubmitting: true,
-					submissionAttempts: state.submissionAttempts + 1,
+					submitAttemt: state.submitAttemt + 1,
 				};
 			case Form.MsgType.SubmitDone:
 				return {
@@ -57,6 +56,7 @@ export function createFormReducer<TFields extends FieldsConfig>(
 		}
 
 		if (Field.Msg.match(msg)) {
+			msg = { ...msg, form: state };
 			const newFields = reduceFields(state.fields, msg);
 
 			// TODO: might want to provide information on what changed to be able to skip validation
@@ -112,6 +112,12 @@ export function createFormReducer<TFields extends FieldsConfig>(
 		return state;
 	};
 
+	formReducer.initialize = (values: TValues) =>
+		formReducer(undefined, {
+			type: Form.MsgType.Init,
+			payload: values,
+		});
+
 	return formReducer;
 }
 
@@ -127,9 +133,9 @@ export function createFieldReducer<TValue>(
 		notes: [],
 		isActive: false,
 		isValidating: false,
-		wasModified: false,
-		wasFocused: false,
-		wasBlurred: false,
+		modifiedAt: -1,
+		focusedAt: -1,
+		blurredAt: -1,
 	};
 
 	const reduceChange = createChangeReducer(validate);
@@ -146,21 +152,22 @@ export function createFieldReducer<TValue>(
 			return field;
 		}
 		const mt = Field.MsgType;
+		const submitAttempt = msg.form?.submitAttemt ?? 0;
 		if (msg.name === field.name) {
 			switch (msg.type) {
 				case mt.Changed:
 					return reduceChange(field, msg);
 				case mt.Focused:
-					return { ...field, wasFocused: true, isActive: true };
+					return { ...field, focusedAt: submitAttempt, isActive: true };
 				case mt.Blurred:
-					return { ...field, wasBlurred: true, isActive: false };
+					return { ...field, blurredAt: submitAttempt, isActive: false };
 				case mt.SetState:
 					return msg.payload;
-				case mt.AsyncCheckInit:
+				case mt.TaskInit:
 					return { ...field, isValidating: true };
-				case mt.AsyncCheckFail:
+				case mt.TaskFail:
 					return { ...field, isValidating: false };
-				case mt.AsyncCheckDone:
+				case mt.TaskDone:
 					return {
 						...field,
 						isValidating: false,
@@ -189,11 +196,15 @@ export function createFieldReducer<TValue>(
 
 		let reducer = (field: S, msg: EChanged): S => {
 			field = { ...field };
-			field.wasModified = field.isActive = true;
+			field.modifiedAt = msg.form?.submitAttemt ?? 0;
+			field.isActive = true;
 			field.value = msg.payload;
 			return field;
 		};
 
+		// TODO: having field level validation isn't very benificial
+		// it can be implemented in form level check and removing it
+		// will simplify working with library
 		if (validate) {
 			const previous = reducer;
 			const reduceValidation = createValidationReducer(validate);
@@ -207,6 +218,7 @@ export function createFieldReducer<TValue>(
 		return function reduceValidation(field: Field.State<TValue>) {
 			const result = validate(field.value);
 			if (result instanceof Promise) {
+				// TODO: handle cancelation or debouncing
 				field.task = createAsyncValidationTask(field, result);
 			} else {
 				field.notes = Field.CheckResult.toNotes(result);
@@ -222,29 +234,27 @@ export function createFieldReducer<TValue>(
 		const name = field.name;
 		const mt = Field.MsgType;
 		return runOnce(async ({ dispatch }) => {
-			dispatch({ type: mt.AsyncCheckInit, name });
+			dispatch({ type: mt.TaskInit, name });
 			try {
 				const payload = await result;
-				dispatch({ type: mt.AsyncCheckDone, name, payload });
+				dispatch({ type: mt.TaskDone, name, payload });
 			} catch (error) {
-				dispatch({ type: mt.AsyncCheckFail, name });
+				dispatch({ type: mt.TaskFail, name });
 				throw error;
 			}
 		});
 	}
 }
 
-type InitAction = typeof InitAction;
-const InitAction = {
-	type: "@init" + Math.random().toString(36).slice(2),
-};
-
 type _Msg<T, P = {}> = { type: T } & P;
 type _MsgPayload<P> = { payload: P };
 
 type TaskFn = (taskApi: TaskAPI) => void | Promise<void>;
 type TaskAPI = {
+	signal: AbortSignal;
 	dispatch: (msg: Form.Msg | Field.Msg<any>) => void;
+	getState: () => Form.State<any>; // TODO: remove any
+	nextState: () => Promise<Form.State<any>>;
 };
 interface WithTask {
 	task: TaskFn;
@@ -255,11 +265,11 @@ interface Note {
 	text: string;
 }
 
-namespace Field {
+export namespace Field {
 	export interface Flags {
-		wasModified: boolean;
-		wasFocused: boolean;
-		wasBlurred: boolean;
+		modifiedAt: Form.SubmitAttempt;
+		focusedAt: Form.SubmitAttempt;
+		blurredAt: Form.SubmitAttempt;
 		isValidating: boolean;
 		isActive: boolean;
 	}
@@ -287,9 +297,10 @@ namespace Field {
 	}
 
 	export enum MsgType {
-		AsyncCheckInit = "fielD/check/init",
-		AsyncCheckDone = "fielD/check/done",
-		AsyncCheckFail = "fielD/check/fail",
+		Init = "fielD/init",
+		TaskInit = "fielD/taskInit",
+		TaskDone = "fielD/taskDone",
+		TaskFail = "fielD/taskFail",
 		Changed = "fielD/changed",
 		Blurred = "fielD/blurred",
 		Focused = "fielD/focused",
@@ -299,10 +310,12 @@ namespace Field {
 		export const match = (msg: { type: string }): msg is Msg<any> =>
 			msg.type in MsgType;
 	}
-	export type Msg<TValue> = { name: string } & (
-		| _Msg<MsgType.AsyncCheckInit>
-		| _Msg<MsgType.AsyncCheckDone, _MsgPayload<CheckResult>>
-		| _Msg<MsgType.AsyncCheckFail>
+	// TODO: try to type form state
+	export type Msg<TValue> = { name: string; form?: Form.State<any> } & (
+		| _Msg<MsgType.Init>
+		| _Msg<MsgType.TaskInit>
+		| _Msg<MsgType.TaskDone, _MsgPayload<CheckResult>>
+		| _Msg<MsgType.TaskFail>
 		| _Msg<MsgType.Changed, _MsgPayload<TValue>>
 		| _Msg<MsgType.Blurred>
 		| _Msg<MsgType.Focused>
@@ -311,17 +324,17 @@ namespace Field {
 
 	export type Reducer<TValue> = (
 		state: State<TValue> | undefined,
-		msg: Msg<TValue> | Form.Msg | InitAction,
+		msg: Msg<TValue> | Form.Msg,
 	) => State<TValue>;
 
 	export type ReducerFactory<TValue> = (fieldName: string) => Reducer<TValue>;
 }
 
-namespace Form {
+export namespace Form {
 	interface Flags {
 		isValidating: boolean;
 		isSubmitting: boolean;
-		submissionAttempts: number;
+		submitAttemt: SubmitAttempt;
 	}
 	export interface State<TFields> extends Flags, WithTask {
 		fields: FieldsState<TFields>;
@@ -331,15 +344,18 @@ namespace Form {
 		[K in keyof TFields]: Field.State<TFields[K]>;
 	};
 
-	export type ValidationFn<TValues> = (
+	export type Checker<TValues> = (
 		values: TValues,
 	) => util.MaybePromise<CheckResult<TValues>>;
+
+	export type SubmitAttempt = number;
 
 	export type CheckResult<TValues> =
 		| void
 		| { [K in keyof TValues]?: Field.CheckResult };
 
 	export enum MsgType {
+		Init = "forM/init",
 		Reset = "forM/reset",
 		SubmitInit = "forM/submit/init",
 		SubmitDone = "forM/submit/done",
@@ -352,6 +368,7 @@ namespace Form {
 			msg.type in MsgType;
 	}
 	export type Msg<T = any> = {} & (
+		| _Msg<MsgType.Init, _MsgPayload<T>>
 		| _Msg<MsgType.Reset>
 		| _Msg<MsgType.SubmitInit>
 		| _Msg<MsgType.SubmitDone>
@@ -360,10 +377,13 @@ namespace Form {
 		| _Msg<MsgType.AsyncCheckFail>
 	);
 
-	export type Reducer<TValues> = (
-		state: State<TValues> | undefined,
-		msg: Msg | Field.Msg<TValues[keyof TValues]>,
-	) => State<TValues>;
+	export interface Reducer<TValues> {
+		(
+			state: State<TValues> | undefined,
+			msg: Msg<TValues> | Field.Msg<TValues[keyof TValues]>,
+		): State<TValues>;
+		initialize: (defaultValues: TValues) => State<TValues>;
+	}
 }
 
 type FieldsConfig = {
@@ -381,7 +401,7 @@ interface FormOptions<
 	TValues = InferValues<TFields>,
 > {
 	fields: TFields;
-	validate?: Form.ValidationFn<TValues>;
+	validate?: Form.Checker<TValues>;
 }
 
 namespace util {
@@ -397,29 +417,3 @@ namespace util {
 
 	export const isReal = (value: unknown): value is {} => value != null;
 }
-
-// {
-// 	const usernameField = createFieldReducer("")((username) => {
-// 		if (username.startsWith("+")) return;
-// 		else return "Must start with +";
-// 	});
-
-// 	const consentField = createFieldReducer(false)((consent) => {
-// 		if (consent) return;
-// 		else return "Must consent";
-// 	});
-
-// 	const preferencesField = createFieldReducer(Array<string>())((pref) => {
-// 		if (pref.length > 2) return;
-// 		else return "must pick at least 3 preference";
-// 	});
-
-// 	const formReducer = createFormReducer({
-// 		fields: {
-// 			username: usernameField,
-// 			consent: consentField,
-// 			preference: preferencesField,
-// 		},
-// 	});
-// 	formReducer;
-// }
