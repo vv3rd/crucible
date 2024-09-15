@@ -2,19 +2,19 @@ import { combineReducers } from "redux";
 
 const { fromEntries, entries } = Object;
 
-export function createFormReducer<TValues extends Form.Values>(
-	options: Form.Options<TValues>,
-): Form.Reducer<TValues> {
+export function createFormReducer<TValues extends Form.Values, TInitArg>(
+	options: Form.Options<TValues, TInitArg>,
+): Form.Reducer<TValues, TInitArg> {
 	type ItsTaskApi = TaskAPI<TValues>;
 	// type ItsTaskFn = TaskFn<TValues>;
 	type ItsFieldState = Form.FieldsState<TValues>;
 	type ItsFormMsg = Form.Msg<TValues>;
 	type ItsFormState = Form.State<TValues>;
 	// type ItsNamedMsg = Field.NamedMsg<TValues>;
-	type ItsFormReducer = Form.Reducer<TValues>;
+	type ItsFormReducer = Form.Reducer<TValues, TInitArg>;
 
 	const {
-		init: fieldsConfig,
+		init: initFields,
 		check: checkForm,
 		submit: submitForm,
 		//
@@ -26,29 +26,28 @@ export function createFormReducer<TValues extends Form.Values>(
 	const reduceFields = combineReducers(
 		fromEntries(
 			entries(
-				fieldsConfig /* FIXME: there's an error here, fieldsConfig is a function */,
+				initFields /* FIXME: there's an error here, fieldsConfig is a function */,
 			).map(([name, factory]) => [name, factory(name)]),
 		) satisfies {
 			[key: string]: Field.Reducer<any>;
 		},
 	) as Reducer<ItsFieldState, ItsFormMsg | Field.Msg<unknown>>;
 
-	const initialFormState: ItsFormState = {
-		fields: reduceFields(undefined, { type: Field.MsgType.Init }),
-		notes: {},
-		task: undefined,
-		isSubmitting: false,
-		isValidating: false,
-		submitAttemt: 0,
+	const initialize = (arg: TInitArg): ItsFormState => {
+		return {
+			fields: reduceFields(undefined, { type: Field.MsgType.Init }),
+			notes: {},
+			task: undefined,
+			isSubmitting: false,
+			isValidating: false,
+			submitAttemt: 0,
+		};
 	};
 
-	const formReducer: ItsFormReducer = (
-		state = initialFormState,
-		msg,
-	): ItsFormState => {
+	const formReducer: ItsFormReducer = (state, msg): ItsFormState => {
 		switch (msg.type) {
 			case Form.MsgType.Reset:
-				return initialFormState;
+				return initialize;
 			case Form.MsgType.SubmitInit: {
 				if (state.isSubmitting) {
 					return state;
@@ -145,11 +144,7 @@ export function createFormReducer<TValues extends Form.Values>(
 		}
 	};
 
-	formReducer.initialize = (values: TValues) =>
-		formReducer(undefined, {
-			type: Form.MsgType.Init,
-			payload: values,
-		});
+	formReducer.initialize = initialize;
 
 	return formReducer;
 }
@@ -237,7 +232,7 @@ type TaskFn<TValues extends Form.Values> = (
 ) => util.MaybePromise<unknown>;
 type TaskAPI<TValues extends Form.Values> = {
 	signal: AbortSignal;
-	dispatch: (msg: Form.Msg | Field.NamedMsg<TValues>) => void;
+	dispatch: (msg: Form.Msg<TValues> | Field.NamedMsg<TValues>) => void;
 	getState: () => Form.State<TValues>;
 };
 
@@ -349,10 +344,10 @@ export namespace Form {
 		TaskStop = "forM/task/stop",
 	}
 	export namespace Msg {
-		export const match = (msg: { type: string }): msg is Msg =>
+		export const match = (msg: { type: string }): msg is Msg<any> =>
 			msg.type in MsgType;
 	}
-	export type Msg<T = any> = {} & (
+	export type Msg<T> = {} & (
 		| MessageWithPayload<MsgType.Init, T>
 		| Message<MsgType.Reset>
 		| Message<MsgType.SubmitInit>
@@ -362,12 +357,12 @@ export namespace Form {
 		| Message<MsgType.TaskFail>
 	);
 
-	export interface Reducer<TValues extends Values> {
+	export interface Reducer<TValues extends Values, TInitArg> {
 		(
-			state: State<TValues> | undefined,
+			state: State<TValues>,
 			msg: Msg<TValues> | Field.NamedMsg<TValues>,
 		): State<TValues>;
-		initialize: (defaultValues: TValues) => State<TValues>;
+		initialize: (defaultValues: TInitArg) => State<TValues>;
 	}
 
 	export type Values = {
@@ -383,8 +378,8 @@ export namespace Form {
 		api: TaskAPI<TValues>,
 	) => util.MaybePromise<void | CheckNotes<TValues>>;
 
-	export interface Options<TValues extends Values> {
-		init: () => FieldsConfig<TValues>;
+	export interface Options<TValues extends Values, TInitArg> {
+		init: (arg: TInitArg) => FieldsConfig<TValues>;
 		check: Form.CheckerFn<TValues>;
 		submit: SubmitFn<TValues>;
 	}
