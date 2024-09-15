@@ -1,19 +1,29 @@
 import { describe, test } from "bun:test";
 import { Field, Form, createFieldReducer, createFormReducer } from "./Form";
 
-const stringField =
-	(defaultValue: string, check?: Field.Checker<string>) =>
+const field =
+	<T>(defaultValue: T) =>
 	(fieldName: string) =>
-		createFieldReducer(fieldName, defaultValue, check);
+		createFieldReducer(fieldName, defaultValue);
 
 describe("createFormReducer() capabilities", () => {
 	test("Validates on blur", () => {
 		const form = createFormReducer({
-			fields: {
-				username: stringField(""),
-			},
+			init: () => ({
+				username: field<string>(""),
+				password: field<"fizz" | "buzz" | null>(null),
+			}),
+			check: (values, msg) => ({
+				task: (api) => {},
+			}),
+			submit: (values, api) => {},
 		});
 
-		const formState = form.initialize({ username: "" });
+		const formState = form.initialize({ username: "", password: "fizz" });
+		form(formState, {
+			type: Field.MsgType.Changed,
+			payload: "",
+			name: "username",
+		});
 	});
 });
