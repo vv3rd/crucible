@@ -1,17 +1,15 @@
-import { combineReducers } from "redux";
-
 const { fromEntries, entries } = Object;
 
 export function createFormReducer<TValues extends Form.Values, TInitArg>(
 	options: Form.Options<TValues, TInitArg>,
-): Form.Reducer<TValues, TInitArg> {
+): Form.OwnReducer<TValues, TInitArg> {
 	type ItsTaskApi = TaskAPI<TValues>;
 	// type ItsTaskFn = TaskFn<TValues>;
-	type ItsFieldState = Form.FieldsState<TValues>;
-	type ItsFormMsg = Form.Msg<TValues>;
+	// type ItsFieldState = Form.FieldsState<TValues>;
+	// type ItsFormMsg = Form.Msg<TValues>;
 	type ItsFormState = Form.State<TValues>;
 	// type ItsNamedMsg = Field.NamedMsg<TValues>;
-	type ItsFormReducer = Form.Reducer<TValues, TInitArg>;
+	type ItsFormReducer = Form.OwnReducer<TValues, TInitArg>;
 
 	const {
 		init: initFields,
@@ -20,53 +18,76 @@ export function createFormReducer<TValues extends Form.Values, TInitArg>(
 		//
 	} = options;
 
-	// TODO: had an idea to allow custom reducers for values (not for fields)
-	// and to make it so types include extra messages that can be
-	// sent to value reducers
-	const reduceFields = combineReducers(
-		fromEntries(
-			entries(
-				initFields /* FIXME: there's an error here, fieldsConfig is a function */,
-			).map(([name, factory]) => [name, factory(name)]),
-		) satisfies {
-			[key: string]: Field.Reducer<any>;
-		},
-	) as Reducer<ItsFieldState, ItsFormMsg | Field.Msg<unknown>>;
+	const initialCommonState: Form.CommonState<TValues> = {
+		notes: {},
+		task: undefined,
+		isValidating: false,
+		isSubmitting: false,
+		submitAttemt: 0,
+	};
 
-	const initialize = (arg: TInitArg): ItsFormState => {
+	const initialize = (input: TInitArg): ItsFormState => {
+		const reduceFields = combineFields<TValues>(initFields(input));
+		const initialFields = reduceFields(undefined, { type: Field.MsgType.Init });
 		return {
-			fields: reduceFields(undefined, { type: Field.MsgType.Init }),
-			notes: {},
-			task: undefined,
-			isSubmitting: false,
-			isValidating: false,
-			submitAttemt: 0,
+			...initialCommonState,
+			reduceFields,
+			initialFields,
+			fields: initialFields,
 		};
 	};
 
 	const formReducer: ItsFormReducer = (state, msg): ItsFormState => {
 		switch (msg.type) {
-			case Form.MsgType.Reset:
-				return initialize;
-			case Form.MsgType.SubmitInit: {
+			case Form.MsgType.Reset: {
+				const { initialFields: fields, initialFields } = state;
+				return { ...state, ...initialCommonState, fields, initialFields };
+			}
+			case Form.MsgType.Submit: {
 				if (state.isSubmitting) {
 					return state;
 				}
-				const { notes, task } = wrapCheckResult(
+				let { notes, task } = wrapCheckResult(
 					checkForm(collectValues(state.fields), msg),
 				);
 
-				// TODO: must check if submit is allowed
-				// and maybe setup submit task instead of
+				const submitTask = async (api: ItsTaskApi) => {
+					const values = collectValues(api.getState().fields);
+					const submitReturn = submitForm(values, api);
+					if (submitReturn instanceof Promise) {
+						try {
+							api.dispatch({ type: Form.MsgType.SubmitInit });
+							const payload = await submitReturn;
+							api.dispatch({ type: Form.MsgType.SubmitDone, payload });
+						} catch (error) {
+							api.dispatch({ type: Form.MsgType.SubmitFail });
+						}
+					} else if (submitReturn) {
+						const payload = submitReturn;
+						api.dispatch({ type: Form.MsgType.SubmitDone, payload });
+					}
+				};
 
+				if (task) {
+					const checkTask = task;
+					task = async (api) => {
+						await checkTask(api);
+						await submitTask(api);
+					};
+				} else {
+					task = submitTask;
+				}
+
+				return { ...state, notes, task };
+			}
+			case Form.MsgType.SubmitInit:
 				return {
 					...state,
-					notes,
-					task,
 					isSubmitting: true,
 					submitAttemt: state.submitAttemt + 1,
 				};
-			}
+			case Form.MsgType.SubmitFail:
+				return { ...state, isSubmitting: false };
 			case Form.MsgType.SubmitDone: {
 				let notes = msg.payload;
 				if (notes) notes = { ...state.notes, ...notes };
@@ -77,11 +98,12 @@ export function createFormReducer<TValues extends Form.Values, TInitArg>(
 					isSubmitting: false,
 				};
 			}
-			case Form.MsgType.TaskInit:
+			case Form.MsgType.CheckInit:
 				return { ...state, isValidating: true };
-			case Form.MsgType.TaskFail:
+			case Form.MsgType.CheckFail:
+			case Form.MsgType.CheckStop:
 				return { ...state, isValidating: false };
-			case Form.MsgType.TaskDone: {
+			case Form.MsgType.CheckDone: {
 				let notes = msg.payload;
 				if (notes) notes = { ...state.notes, ...notes };
 				else notes = state.notes;
@@ -93,7 +115,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg>(
 			const msgWithForm = { ...msg, form: state };
 			msg = msgWithForm;
 
-			const fields = reduceFields(state.fields, msg);
+			const fields = state.reduceFields(state.fields, msg);
 
 			const checkResult = checkForm(collectValues(fields), msg);
 
@@ -119,16 +141,16 @@ export function createFormReducer<TValues extends Form.Values, TInitArg>(
 			return async (api: ItsTaskApi) => {
 				const output = task(api);
 				if (!(output instanceof Promise) && output) {
-					api.dispatch({ type: Form.MsgType.TaskDone, payload: output });
+					api.dispatch({ type: Form.MsgType.CheckDone, payload: output });
 					return;
 				}
 
-				api.dispatch({ type: Form.MsgType.TaskInit });
+				api.dispatch({ type: Form.MsgType.CheckInit });
 				try {
 					const payload = await output;
-					api.dispatch({ type: Form.MsgType.TaskDone, payload });
+					api.dispatch({ type: Form.MsgType.CheckDone, payload });
 				} catch (error) {
-					api.dispatch({ type: Form.MsgType.TaskFail });
+					api.dispatch({ type: Form.MsgType.CheckFail });
 					throw error;
 				}
 			};
@@ -153,7 +175,7 @@ export function createFieldReducer<TValue>(
 	fieldName: string,
 	defaultValue: TValue,
 ) {
-	const defaultState: Field.State<TValue> = {
+	const initialize = (): Field.State<TValue> => ({
 		name: fieldName,
 		value: defaultValue,
 		notes: [],
@@ -162,10 +184,10 @@ export function createFieldReducer<TValue>(
 		modifiedAt: -1,
 		focusedAt: -1,
 		blurredAt: -1,
-	};
+	});
 
-	const fieldReducer: Field.Reducer<TValue> = (
-		field = defaultState,
+	const fieldReducer: Field.OwnReducer<TValue> = (
+		field = initialize(),
 		msg,
 	): Field.State<TValue> => {
 		if (msg.type === Field.MsgType.Init) {
@@ -182,7 +204,7 @@ export function createFieldReducer<TValue>(
 					return { ...field, focusedAt: attempt, isActive: true };
 				case Field.MsgType.Blurred:
 					return { ...field, blurredAt: attempt, isActive: false };
-				case Field.MsgType.SetState:
+				case Field.MsgType.HardSet:
 					const next = msg.payload;
 					return {
 						name: field.name,
@@ -218,9 +240,9 @@ interface MessageWithPayload<T, P> {
 	payload: P;
 }
 
-interface Reducer<S, A> {
+type Reducer<S, A> = {
 	(state: S | undefined, msg: A): S;
-}
+};
 
 interface Note {
 	level: number;
@@ -242,27 +264,27 @@ export namespace FieldGroup {
 }
 
 export namespace Field {
-	export interface Flags {
+	export interface Statuses {
 		modifiedAt: Form.SubmitAttempt;
 		focusedAt: Form.SubmitAttempt;
 		blurredAt: Form.SubmitAttempt;
 		isValidating: boolean;
 		isActive: boolean;
 	}
-	export interface State<TValue> extends Flags {
+	export type State<TValue> = Statuses & {
 		name: string;
 		value: TValue;
 		notes: Note[];
-	}
+	};
 
 	export type CheckResult = undefined | void | string | Note;
 
 	export enum MsgType {
-		Init = "fielD/init",
-		Changed = "fielD/changed",
-		Blurred = "fielD/blurred",
-		Focused = "fielD/focused",
-		SetState = "fielD/setState",
+		Init = "field/init",
+		Changed = "field/changed",
+		Blurred = "field/blurred",
+		Focused = "field/focused",
+		HardSet = "field/hardSet",
 	}
 	export namespace Msg {
 		export const match = (msg: { type: string }): msg is Msg<any> =>
@@ -272,12 +294,12 @@ export namespace Field {
 	export type Msg<TValue> =
 		| ({
 				name: string;
-				form?: Form.Flags;
+				form?: Form.Statuses;
 		  } & (
 				| MessageWithPayload<MsgType.Changed, TValue>
 				| Message<MsgType.Blurred>
 				| Message<MsgType.Focused>
-				| MessageWithPayload<MsgType.SetState, Field.State<TValue>>
+				| MessageWithPayload<MsgType.HardSet, Field.State<TValue>>
 		  ))
 		| Message<MsgType.Init>;
 
@@ -285,40 +307,53 @@ export namespace Field {
 		[K in keyof TValues]: Field.Msg<TValues[K]> & { name: K };
 	}[keyof TValues];
 
-	export type Reducer<TValue> = (
+	export type OwnReducer<TValue> = (
 		state: State<TValue> | undefined,
 		msg: Msg<TValue>,
 	) => State<TValue>;
 
-	export type ReducerFactory<TValue> = (fieldName: string) => Reducer<TValue>;
+	export type ReducerFactory<TValue> = (
+		fieldName: string,
+	) => OwnReducer<TValue>;
 }
 
 export namespace Form {
 	export type SubmitAttempt = number;
 
-	export interface Flags {
+	export interface Statuses {
 		isValidating: boolean;
 		isSubmitting: boolean;
 		submitAttemt: SubmitAttempt;
 	}
-	export interface State<TValues extends Values> extends Flags {
-		fields: FieldsState<TValues>;
+	export type CommonState<TValues extends Values> = Statuses & {
 		notes: NonNullable<CheckNotes<TValues>>;
 		task: undefined | TaskFn<TValues>;
-	}
+	};
+	export type Fields<TValues extends Values> = {
+		reduceFields: Reducer<FieldsState<TValues>, Field.NamedMsg<TValues>>;
+		initialFields: FieldsState<TValues>;
+		fields: FieldsState<TValues>;
+	};
+	export type State<TValues extends Values> = Fields<TValues> &
+		CommonState<TValues>;
+
 	export type FieldsState<TFields> = {
 		[K in keyof TFields]: Field.State<TFields[K]>;
 	};
 
 	type SubmitMsg<TValues extends Values> = Extract<
 		Msg<TValues>,
-		Message<MsgType.SubmitInit>
+		Message<MsgType.Submit>
 	>;
 
 	export type CheckerFn<TValues extends Values> = (
 		values: TValues,
 		msg: Field.NamedMsg<TValues> | SubmitMsg<TValues>,
 	) => void | CheckResult<TValues>;
+
+	export type CheckNotes<TValues> = {
+		[K in keyof TValues]?: Field.CheckResult;
+	};
 
 	export type CheckTask<TValues extends Values> = (
 		taskApi: TaskAPI<TValues>,
@@ -329,35 +364,34 @@ export namespace Form {
 		task?: CheckTask<TValues>;
 	};
 
-	export type CheckNotes<TValues> = {
-		[K in keyof TValues]?: Field.CheckResult;
-	};
-
 	export enum MsgType {
-		Init = "forM/init",
-		Reset = "forM/reset",
-		SubmitInit = "forM/submit/init",
-		SubmitDone = "forM/submit/done",
-		TaskInit = "forM/task/init",
-		TaskDone = "forM/task/done",
-		TaskFail = "forM/task/fail",
-		TaskStop = "forM/task/stop",
+		Reset = "form/reset",
+		Submit = "form/submit",
+		SubmitInit = "form/submit/init",
+		SubmitDone = "form/submit/done",
+		SubmitFail = "form/submit/fail",
+		CheckInit = "form/check/init",
+		CheckDone = "form/check/done",
+		CheckFail = "form/check/fail",
+		CheckStop = "form/check/stop",
 	}
 	export namespace Msg {
 		export const match = (msg: { type: string }): msg is Msg<any> =>
 			msg.type in MsgType;
 	}
 	export type Msg<T> = {} & (
-		| MessageWithPayload<MsgType.Init, T>
 		| Message<MsgType.Reset>
+		| Message<MsgType.Submit>
 		| Message<MsgType.SubmitInit>
+		| Message<MsgType.SubmitFail>
 		| MessageWithPayload<MsgType.SubmitDone, void | CheckNotes<T>>
-		| Message<MsgType.TaskInit>
-		| MessageWithPayload<MsgType.TaskDone, void | CheckNotes<T>>
-		| Message<MsgType.TaskFail>
+		| Message<MsgType.CheckInit>
+		| Message<MsgType.CheckFail>
+		| Message<MsgType.CheckStop>
+		| MessageWithPayload<MsgType.CheckDone, void | CheckNotes<T>>
 	);
 
-	export interface Reducer<TValues extends Values, TInitArg> {
+	export interface OwnReducer<TValues extends Values, TInitArg> {
 		(
 			state: State<TValues>,
 			msg: Msg<TValues> | Field.NamedMsg<TValues>,
@@ -369,7 +403,7 @@ export namespace Form {
 		readonly [key: string]: any;
 	};
 
-	type FieldsConfig<TValues extends Values> = {
+	export type FieldsConfig<TValues extends Values> = {
 		readonly [K in keyof TValues]: Field.ReducerFactory<TValues[K]>;
 	};
 
@@ -378,11 +412,11 @@ export namespace Form {
 		api: TaskAPI<TValues>,
 	) => util.MaybePromise<void | CheckNotes<TValues>>;
 
-	export interface Options<TValues extends Values, TInitArg> {
+	export type Options<TValues extends Values, TInitArg> = {
 		init: (arg: TInitArg) => FieldsConfig<TValues>;
 		check: Form.CheckerFn<TValues>;
 		submit: SubmitFn<TValues>;
-	}
+	};
 }
 
 namespace util {
@@ -394,4 +428,53 @@ namespace util {
 		typeof value === "string";
 
 	export const isReal = (value: unknown): value is {} => value != null;
+}
+
+// TODO: had an idea to allow custom reducers for values (not for fields)
+// and to make it so types include extra messages that can be
+// sent to value reducers
+function combineFields<TValues extends Form.Values>(
+	fields: Form.FieldsConfig<any>,
+) {
+	type State = Form.FieldsState<TValues>;
+	type Msg = Field.Msg<TValues>;
+
+	let mapper = ([key, factory]: [string, Field.ReducerFactory<unknown>]) =>
+		[key, factory(key)] as const;
+
+	if (import.meta.env.DEV) {
+		mapper = ([key, factory]) => {
+			console.assert(
+				typeof key === "string",
+				"Found non string key in init object",
+			);
+			console.assert(
+				factory instanceof Function,
+				"Found non function value in init object",
+			);
+			const reducer = factory(key);
+			console.assert(
+				reducer instanceof Function,
+				"Reducer factory didn't return a function",
+			);
+			return [key, reducer];
+		};
+	}
+
+	const reducers = entries(fields).map(mapper);
+
+	return function reduceFields(current: State | undefined, msg: Msg): State {
+		let next: any = current;
+		for (let [key, reducer] of reducers) {
+			const fieldWas = current?.[key];
+			const fieldNow = reducer(fieldWas, msg);
+			if (fieldWas !== fieldNow) {
+				if (next === current) {
+					next = { ...current };
+				}
+				next[key] = fieldNow;
+			}
+		}
+		return next;
+	};
 }
