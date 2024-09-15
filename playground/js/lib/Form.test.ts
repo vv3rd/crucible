@@ -1,6 +1,5 @@
 import { describe, test } from "bun:test";
 import { Field, Form, createFieldReducer, createFormReducer } from "./Form";
-import { combineReducers } from "redux";
 
 const field =
 	<T>(defaultValue: T) =>
@@ -8,18 +7,11 @@ const field =
 		createFieldReducer(fieldName, defaultValue);
 
 describe("createFormReducer() capabilities", () => {
-	test("crash", () => {
-		combineReducers({
-			thing: () => {
-				throw new Error("KEK");
-			},
-		})(undefined, { type: "" });
-	});
-	test.skip("Validates on blur", () => {
+	test("Validates on blur", () => {
 		const form = createFormReducer({
-			init: () => ({
-				username: field<string>(""),
-				password: field<"fizz" | "buzz" | null>(null),
+			init: (pass: "fizz" | "buzz" | null) => ({
+				username: field(""),
+				password: field(pass),
 			}),
 			check: (values, msg) => ({
 				task: (api) => {},
@@ -27,11 +19,11 @@ describe("createFormReducer() capabilities", () => {
 			submit: (values, api) => {},
 		});
 
-		const formState = form.initialize({ username: "", password: "fizz" });
-		form(formState, {
+		let state = form.getInitialState(null);
+		state = form(state, {
 			type: Field.MsgType.Changed,
-			payload: "",
-			name: "username",
+			name: "password",
+			payload: "fizz",
 		});
 	});
 });

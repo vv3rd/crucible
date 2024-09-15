@@ -1,6 +1,6 @@
 const { fromEntries, entries } = Object;
 
-export function createFormReducer<TValues extends Form.Values, TInitArg>(
+export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 	options: Form.Options<TValues, TInitArg>,
 ): Form.OwnReducer<TValues, TInitArg> {
 	type ItsTaskApi = TaskAPI<TValues>;
@@ -26,7 +26,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg>(
 		submitAttemt: 0,
 	};
 
-	const initialize = (input: TInitArg): ItsFormState => {
+	const getInitialState = (input: TInitArg): ItsFormState => {
 		const reduceFields = combineFields<TValues>(initFields(input));
 		const initialFields = reduceFields(undefined, { type: Field.MsgType.Init });
 		return {
@@ -166,7 +166,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg>(
 		}
 	};
 
-	formReducer.initialize = initialize;
+	formReducer.getInitialState = getInitialState;
 
 	return formReducer;
 }
@@ -175,7 +175,7 @@ export function createFieldReducer<TValue>(
 	fieldName: string,
 	defaultValue: TValue,
 ) {
-	const initialize = (): Field.State<TValue> => ({
+	const getInitialState = (): Field.State<TValue> => ({
 		name: fieldName,
 		value: defaultValue,
 		notes: [],
@@ -187,7 +187,7 @@ export function createFieldReducer<TValue>(
 	});
 
 	const fieldReducer: Field.OwnReducer<TValue> = (
-		field = initialize(),
+		field = getInitialState(),
 		msg,
 	): Field.State<TValue> => {
 		if (msg.type === Field.MsgType.Init) {
@@ -230,6 +230,15 @@ export function createFieldReducer<TValue>(
 
 	return fieldReducer;
 }
+
+export const action = {
+	Changed: <N extends string, V>(name: N, value: V) =>
+		({
+			type: Field.MsgType.Changed,
+			name,
+			payload: value,
+		}) as const,
+};
 
 interface Message<T> {
 	type: T;
@@ -396,7 +405,8 @@ export namespace Form {
 			state: State<TValues>,
 			msg: Msg<TValues> | Field.NamedMsg<TValues>,
 		): State<TValues>;
-		initialize: (defaultValues: TInitArg) => State<TValues>;
+		getInitialState: (defaultValues: TInitArg) => State<TValues>;
+		// TODO: provide action creators
 	}
 
 	export type Values = {
