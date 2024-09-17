@@ -1,8 +1,9 @@
 const { fromEntries, entries } = Object;
 
+// TODO: update types to allow custom value reducers with any message
 export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 	options: Form.Options<TValues, TInitArg>,
-): Form.OwnReducer<TValues, TInitArg> {
+) {
 	type ItsTaskApi = TaskAPI<TValues>;
 	// type ItsTaskFn = TaskFn<TValues>;
 	// type ItsFieldState = Form.FieldsState<TValues>;
@@ -168,7 +169,34 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 
 	formReducer.getInitialState = getInitialState;
 
-	return formReducer;
+	const actions = {
+		changed: <N extends keyof TValues>(name: N, value: TValues[N]) =>
+			({
+				type: Field.MsgType.Changed,
+				name,
+				payload: value,
+			}) as const,
+		focused: (name: keyof TValues) =>
+			({
+				type: Field.MsgType.Focused,
+				name,
+			}) as const,
+		blurred: (name: keyof TValues) =>
+			({
+				type: Field.MsgType.Blurred,
+				name,
+			}) as const,
+		submit: () =>
+			({
+				type: Form.MsgType.Submit,
+			}) as const,
+		reset: () =>
+			({
+				type: Form.MsgType.Reset,
+			}) as const,
+	};
+
+	return { reducer: formReducer, actions };
 }
 
 export function createFieldReducer<TValue>(
@@ -231,15 +259,6 @@ export function createFieldReducer<TValue>(
 	return fieldReducer;
 }
 
-export const action = {
-	Changed: <N extends string, V>(name: N, value: V) =>
-		({
-			type: Field.MsgType.Changed,
-			name,
-			payload: value,
-		}) as const,
-};
-
 interface Message<T> {
 	type: T;
 }
@@ -266,11 +285,6 @@ type TaskAPI<TValues extends Form.Values> = {
 	dispatch: (msg: Form.Msg<TValues> | Field.NamedMsg<TValues>) => void;
 	getState: () => Form.State<TValues>;
 };
-
-export namespace FieldGroup {
-	// TODO: conceive of array fields
-	// interface State {}
-}
 
 export namespace Field {
 	export interface Statuses {

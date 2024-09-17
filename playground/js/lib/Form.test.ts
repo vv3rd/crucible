@@ -1,5 +1,6 @@
 import { describe, test } from "bun:test";
 import { Field, Form, createFieldReducer, createFormReducer } from "./Form";
+import { useReducer } from "react";
 
 const field =
 	<T>(defaultValue: T) =>
@@ -8,7 +9,7 @@ const field =
 
 describe("createFormReducer() capabilities", () => {
 	test("Validates on blur", () => {
-		const form = createFormReducer({
+		const { reducer, actions } = createFormReducer({
 			init: (pass: "fizz" | "buzz" | null) => ({
 				username: field(""),
 				password: field(pass),
@@ -19,11 +20,9 @@ describe("createFormReducer() capabilities", () => {
 			submit: (values, api) => {},
 		});
 
-		let state = form.getInitialState(null);
-		state = form(state, {
-			type: Field.MsgType.Changed,
-			name: "password",
-			payload: "fizz",
-		});
+		let state = reducer.getInitialState(null);
+		state = reducer(state, actions.changed("password", "fizz"));
+		state = reducer(state, actions.submit());
+		state = reducer(state, actions.reset());
 	});
 });
