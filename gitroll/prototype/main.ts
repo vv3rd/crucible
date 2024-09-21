@@ -1,12 +1,12 @@
-export function DrawGraph(history: Git.History): string[] {
+export function DrawGraph(history: Git.History): Drawing.Row[] {
 	let { commits } = history;
 
 	if (commits.length === 0) {
-		throw new Error(NOTHING_TO_DRAW_ERROR);
+		return [];
 	}
 
 	if (commits.length === 1) {
-		return [Drawing.Gliph.Node];
+		return [{ columns: [Drawing.Column.CommitNode(0)] }];
 	}
 
 	let ongoing = new Set<Drawing.Branch>();
@@ -23,7 +23,7 @@ export function DrawGraph(history: Git.History): string[] {
 
 		let commitIsParent = children.length > 0;
 		let commitIsHeadOfUmergedBranch = !commitIsParent;
-		let commitIsMerge = thisCommit.parents.length === 2;
+		let commitIsMergeIn = thisCommit.parents.length === 2;
 		let commitIsDangling = thisCommit.parents.length === 0;
 
 		if (commitIsParent) {
@@ -48,7 +48,6 @@ export function DrawGraph(history: Git.History): string[] {
 	}
 }
 
-const NOTHING_TO_DRAW_ERROR = "Nothing to draw";
 const DANGLING_COMMIT_ERROR =
 	"Don't know how to draw what appears to be a dangling commit";
 
@@ -67,26 +66,47 @@ export namespace Drawing {
 	}
 
 	type AnyColumn = {
-		positionIndex: number;
+		position: number;
 	};
 
 	export type Column = AnyColumn &
 		(
-			| {
-					type: ColumnType.VerticalEdge;
-			  }
-			| {
-					type: ColumnType.BranchStart;
-					turn: LineTurn;
-			  }
-			| {
-					type: ColumnType.BranchEnd;
-					turn: LineTurn;
-			  }
-			| {
-					type: ColumnType.CommitNode;
-			  }
+			| ReturnType<typeof Column.VerticalEdge>
+			| ReturnType<typeof Column.BranchStart>
+			| ReturnType<typeof Column.BranchEnd>
+			| ReturnType<typeof Column.CommitNode>
+			| ReturnType<typeof Column.WhiteSpace>
 		);
+
+	export namespace Column {
+		export const VerticalEdge = (i: number) =>
+			({
+				position: i,
+				type: ColumnType.VerticalEdge,
+			}) as const;
+		export const BranchStart = (i: number, turn: LineTurn) =>
+			({
+				position: i,
+				type: ColumnType.BranchStart,
+				turn: turn,
+			}) as const;
+		export const BranchEnd = (i: number, turn: LineTurn) =>
+			({
+				position: i,
+				type: ColumnType.BranchEnd,
+				turn: turn,
+			}) as const;
+		export const CommitNode = (i: number) =>
+			({
+				position: i,
+				type: ColumnType.CommitNode,
+			}) as const;
+		export const WhiteSpace = (i: number) =>
+			({
+				position: i,
+				type: ColumnType.WhiteSpace,
+			}) as const;
+	}
 
 	export type Row = {
 		columns: Array<Column>;
