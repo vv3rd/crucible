@@ -1,6 +1,7 @@
 import gleam/int
-import lustre
+import lustre.{application}
 import lustre/attribute.{class}
+import lustre/effect as eff
 import lustre/element.{text}
 import lustre/element/html.{button, div, p}
 import lustre/event.{on_click}
@@ -8,7 +9,7 @@ import plinth/browser/window
 
 pub fn main() {
   let href = window.location()
-  let app = lustre.simple(init, update, view)
+  let app = application(init, update, view)
   let inputs = Inputs(href)
   let assert Ok(_) = lustre.start(app, "#app", inputs)
 
@@ -20,11 +21,25 @@ type Inputs {
 }
 
 type Model {
-  Model(count: Int, location: String)
+  Model(count: Int, page: Page)
+}
+
+type Page {
+  IndexPage
+  NotFoundPage
+}
+
+fn page_from_href(href: String) {
+  case href {
+    "/" -> IndexPage
+    _ -> NotFoundPage
+  }
 }
 
 fn init(ins: Inputs) {
-  Model(count: 0, location: ins.href)
+  let page = page_from_href(ins.href)
+  let model = Model(count: 0, page: page)
+  #(model, eff.none())
 }
 
 type Msg {
@@ -33,14 +48,15 @@ type Msg {
 }
 
 fn update(model: Model, msg) {
-  case msg {
+  let next_model = case msg {
     Incr -> Model(..model, count: model.count + 1)
     Decr -> Model(..model, count: model.count - 1)
   }
+  #(next_model, eff.none())
 }
 
-fn d_button(attrs, children) {
-  button([class(" btn "), ..attrs], children)
+fn d_button(a, c) {
+  button([class(" btn "), ..a], c)
 }
 
 fn view(model: Model) {

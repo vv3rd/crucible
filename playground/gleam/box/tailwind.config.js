@@ -10,4 +10,7 @@ module.exports = {
   // daisyui: {
   //   themes: ["retro"],
   // },
+  // experimental: {
+  //   classRegex: ["class\\(.*?\\)(?!\\])", "(?:'|\"|`)([^\"'`]*)(?:'|\"|`)"],
+  // },
 };

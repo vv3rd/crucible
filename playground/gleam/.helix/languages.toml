@@ -1,0 +1,7 @@
+
+[[language]]
+language-servers = ["gleam", "tailwind"]
+name = "gleam"
+
+[language-server.tailwind.config.tailwindCSS.experimental]
+classRegex = ["class\\(.*?\\)(?!\\])", "(?:'|\"|`)([^\"'`]*)(?:'|\"|`)"]

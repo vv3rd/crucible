@@ -18,8 +18,9 @@
             erlang_27
             rebar3
             inotify-tools
-            pkgs.nodejs_22.pkgs.pnpm
-            pkgs.nodejs_22
+            nodejs_22.pkgs.pnpm
+            nodejs_22
+            tailwindcss-language-server
           ];
 
         };
