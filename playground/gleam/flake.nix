@@ -22,7 +22,6 @@
             nodejs_22
             tailwindcss-language-server
           ];
-
         };
       }
     );
