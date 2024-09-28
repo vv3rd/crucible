@@ -16,7 +16,7 @@
     "noEmit": true,
 
     "strict": true,
-    "noFallthroughCasesInSwitch": true,
+    "noFallthroughCasesInSwitch": false,
 
     "noUnusedLocals": false,
     "noUnusedParameters": false

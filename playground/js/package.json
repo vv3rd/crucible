@@ -16,7 +16,11 @@
     "vite": "^5.2.0"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.2.7",
+    "jotai": "^2.10.0",
+    "jotai-zustand": "^0.6.0",
     "redux": "^5.0.1",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zustand": "^5.0.0-rc.2"
   }
 }
