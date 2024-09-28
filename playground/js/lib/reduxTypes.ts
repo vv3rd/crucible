@@ -51,6 +51,8 @@ export type InferMatch<M extends Matchable<any>> = M extends Matchable<infer T>
 	? T
 	: never;
 
+export type WithPrefix<P, A> = `${Extract<P, string>}/${Extract<A, string>}`;
+
 export type AnyActionMaker = ActionMaker<Action, any[]>;
 
 export type AnyActionPartMaker = { (...args: any[]): { payload: any } };

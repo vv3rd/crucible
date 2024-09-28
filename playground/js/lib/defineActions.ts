@@ -3,6 +3,7 @@ import {
 	AnyActionMaker,
 	AnyActionPartMaker,
 	CompleteActionMaker,
+	WithPrefix,
 } from "./reduxTypes";
 
 const { assign, entries, fromEntries } = Object;
@@ -31,7 +32,7 @@ function defineAction<TType extends string>(type: TType) {
 
 function defineActionKind<
 	TPrefix extends string,
-	TMakers extends Record<string, AnyActionPartMaker>,
+	TMakers extends { [key: string]: AnyActionPartMaker; match?: never },
 >(prefix: TPrefix, actionPartMakers: TMakers) {
 	type ActionKindMakers = {
 		[K in keyof TMakers]: CompleteActionMaker<
@@ -69,8 +70,6 @@ function defineActionKind<
 
 	return { ...actionMakers, match: matchKind };
 }
-
-type WithPrefix<P extends string, A> = `${P}/${Extract<A, string>}`;
 
 const appActionKind = defineActionKind("thingy", {
 	kek: withPayload<void>,
