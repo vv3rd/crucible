@@ -46,5 +46,9 @@ export interface Dispatch<TAction = Action, TState = unknown> {
 }
 
 export interface Reducer<TState, TAction> {
-	(state: TState, action: TAction, schedule: SetTask<TState>): TState;
+	(
+		state: TState | undefined,
+		action: TAction,
+		schedule: SetTask<TState>,
+	): TState;
 }

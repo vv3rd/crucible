@@ -75,7 +75,7 @@ type Prepare<K, T extends PayloadDef> = Pretty<
 
 type Pretty<T> = { [K in keyof T]: T[K] } & {};
 
-function defineState<T>(getInitialState: () => T) {
+export function defineState<T>(getInitialState: () => T) {
 	function createReducer(cases: Case[]) {
 		function finalReducer(
 			state: T | undefined = getInitialState(),
@@ -85,7 +85,10 @@ function defineState<T>(getInitialState: () => T) {
 			for (const c of cases) {
 				for (const d of c.defs) {
 					if (d.type === action.type) {
-						return c.reduce(state, action, schedule);
+						const next = c.reduce(state, action, schedule);
+						if (next) {
+							return next;
+						}
 					}
 				}
 			}
@@ -117,10 +120,23 @@ function defineState<T>(getInitialState: () => T) {
 			...restArgs: AnyActionDef[]
 		) {
 			if (typeof firstArg === "string") {
-				const newDef: AnyActionDef = (...args) => ({
+				let newDef: AnyActionDef;
+				const typing = {
 					type: firstArg,
-					payload: secondArg(...args),
-				});
+					match: createMatcher(firstArg),
+				};
+				if (secondArg) {
+					// @ts-ignore
+					newDef = (...args: any[]) => ({
+						type: firstArg,
+						payload: secondArg(...args),
+					});
+				} else {
+					// @ts-ignore
+					newDef = () => ({
+						type: firstArg,
+					});
+				}
 				newDef.type = firstArg;
 				newDef.match = createMatcher(firstArg);
 
@@ -157,65 +173,65 @@ function createMatcher(type: string) {
 	return (ac: Action): ac is Action => ac.type === type;
 }
 
-const withPayload = <T>(payload: T) => ({ payload });
+export const withPayload = <T>(payload: T) => ({ payload });
 
-export const routine = ((type) => ({
-	aborted: createAction(`${type}/ABORTED`),
-	trigger: createAction(`${type}/TRIGGER`),
-	request: createAction(`${type}/REQUEST`),
-	success: createAction(`${type}/SUCCESS`, withPayload<{ bar: string }>),
-	failure: createAction(`${type}/FAILURE`, (error: unknown) => ({
-		payload: error,
-	})),
-}))("operations" as const);
+// export const routine = ((type) => ({
+// 	aborted: createAction(`${type}/ABORTED`),
+// 	trigger: createAction(`${type}/TRIGGER`),
+// 	request: createAction(`${type}/REQUEST`),
+// 	success: createAction(`${type}/SUCCESS`, withPayload<{ bar: string }>),
+// 	failure: createAction(`${type}/FAILURE`, (error: unknown) => ({
+// 		payload: error,
+// 	})),
+// }))("operations" as const);
 
-const { reducer, actions } = defineState(() => ({
-	foo: "bar",
-}))(
-	routine.success,
-	routine.failure,
-)((state, action) => {
-	switch (action.type) {
-		case "operations/SUCCESS":
-			console.log(action.payload.bar);
-			return state;
-		case "operations/FAILURE":
-			let x: unknown = action.payload;
-			return state;
-		default:
-			return absurd(action);
-	}
-})(
-	routine.failure,
-	//
-)((state) => {
-	return {
-		foo: state.foo,
-	};
-})("trigger", (kek: number) => ({
-	payload: { kek },
-}))((state, action) => {
-	return {
-		...state,
-		foo: action.payload.kek.toString(),
-	};
-})("failure")((state, action) => {
-	return {
-		...state,
-		foo: "fail",
-	};
-});
+// const { reducer, actions } = defineState(() => ({
+// 	foo: "bar",
+// }))(
+// 	routine.success,
+// 	routine.failure,
+// )((state, action) => {
+// 	switch (action.type) {
+// 		case "operations/SUCCESS":
+// 			console.log(action.payload.bar);
+// 			return state;
+// 		case "operations/FAILURE":
+// 			let x: unknown = action.payload;
+// 			return state;
+// 		default:
+// 			return absurd(action);
+// 	}
+// })(
+// 	routine.failure,
+// 	//
+// )((state) => {
+// 	return {
+// 		foo: state.foo,
+// 	};
+// })("trigger", (kek: number) => ({
+// 	payload: { kek },
+// }))((state, action) => {
+// 	return {
+// 		...state,
+// 		foo: action.payload.kek.toString(),
+// 	};
+// })("failure")((state, action) => {
+// 	return {
+// 		...state,
+// 		foo: "fail",
+// 	};
+// });
 
-reducer({ foo: "" }, { type: "failure" }, () => {}).foo;
+// reducer({ foo: "" }, { type: "failure" }, () => {}).foo;
 
-let x: "failure" = actions.failure().type;
-let y: number = actions.trigger(1).payload.kek;
+// let x: "failure" = actions.failure().type;
+// let y: number = actions.trigger(1).payload.kek;
 
-function defineActions<N extends string, R extends Record<string, PayloadDef>>(
-	prefix: N,
-	builder: (buildUtils: {}) => R,
-) {}
+// function defineActions<N extends string, R extends Record<string, PayloadDef>>(
+// 	prefix: N,
+// 	builder: (buildUtils: {}) => R,
+// ) {}
 
-const absurd = (_: never): never => {
-	throw new Error("absurd");
-};
+// const absurd = (_: never): never => {
+// 	throw new Error("absurd");
+// };
