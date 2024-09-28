@@ -1,5 +1,13 @@
 import { createAction } from "@reduxjs/toolkit";
-import { Action, UnknownAction } from "redux";
+import {
+	Reducer,
+	SetTask,
+	PayloadDef,
+	AnyActionDef,
+	Action,
+	SomeAction,
+	ActionDef,
+} from "./redux-thing";
 
 const { entries } = Object;
 
@@ -30,95 +38,67 @@ export function composeReducers(
 	};
 }
 
-interface ActionTyping<A extends Action> {
-	type: A["type"];
-	match: (actionLike: Action) => actionLike is A;
-}
+type CaseReducer<TState, TAction> = (
+	state: TState,
+	action: TAction,
+	schedule: SetTask<TState>,
+) => TState | void;
 
-interface ActionDef<A extends Action = Action> extends ActionTyping<A> {
-	(...args: any[]): A;
-}
-
-interface PayloadDef {
-	(...args: any[]): { payload: any };
-}
-
-interface SetTask<TState> {
-	(task: TaskFn<TState>): void;
-}
-
-interface TaskFn<TState> {
-	(taskApi: TaskApi<TState>): void;
-}
-
-interface TaskApi<TState> {
-	dispatch: (actionOrTask: Action) => void;
-	getState: () => TState;
-	getActions: () => AsyncGenerator<UnknownAction, void>;
-}
-
-interface Reducer<TState, TAction> {
-	(state: TState, action: TAction, schedule: SetTask<TState>): TState;
-}
+type AnyCaseReducer = CaseReducer<any, any>;
 
 interface AddCaseReducer<TState, TAction, B extends Build> {
 	(
-		reducer: (
-			state: TState,
-			action: TAction,
-			schedule: SetTask<TState>,
-		) => TState | void,
-	): AddCase<TState, Build<B["action"] | TAction, B["creators"]>>;
+		reducer: CaseReducer<TState, TAction>,
+	): AddCase<TState, Build<B["action"] | TAction, B["preparers"]>>;
 }
 
 interface AddCase<TState, B extends Build> {
-	<N extends string, Fn extends PayloadDef>(
-		actionType: N,
-		preparePayload: Fn,
+	<TType extends string, TPrep extends PayloadDef>(
+		actionType: TType,
+		preparePayload: TPrep,
 	): AddCaseReducer<
 		TState,
-		TypedAs<N, ReturnType<Fn>>,
-		Build<B["action"], B["creators"] & { [key in N]: Fn }>
+		Prepare<TType, TPrep>,
+		Build<B["action"], B["preparers"] & { [key in TType]: TPrep }>
 	>;
 
 	<N extends string>(
 		actionType: N,
 	): AddCaseReducer<
 		TState,
-		{ type: N },
-		Build<B["action"], B["creators"] & { [key in N]: () => {} }>
+		Action<N>,
+		Build<B["action"], B["preparers"] & { [key in N]: () => void }>
 	>;
 
-	<As extends readonly ActionDef[]>(
+	<As extends readonly AnyActionDef[]>(
 		...actionCreators: As
 	): AddCaseReducer<TState, ReturnType<As[number]>, B>;
 
-	reducer: {
-		(state: TState, action: B["action"], schedule: SetTask<TState>): TState;
+	reducer: Reducer<TState, B["action"]> & {
 		getInitialState: () => TState;
 	};
 
 	actions: {
-		[K in keyof B["creators"]]: ActionDef<
-			TypedAs<Extract<K, string>, ReturnType<B["creators"][K]>>
+		[K in keyof B["preparers"]]: ActionDef<
+			Prepare<K, B["preparers"][K]>,
+			Parameters<B["preparers"][K]>
 		>;
 	};
 }
 
 interface Build<A = unknown, C = Record<string, PayloadDef>> {
 	action: A;
-	creators: C;
+	preparers: C;
 }
 
 interface Case {
-	defs: ActionDef[];
-	reduce: SomeFn;
+	defs: AnyActionDef[];
+	reduce: AnyCaseReducer;
 }
 
-type Fn<R = void, A extends any[] = []> = (...args: A) => R;
-type SomeFn<R = any, A extends any[] = any[]> = Fn<R, A>;
-
-type TypedAs<K extends string, T> = Pretty<{ type: K } & T>;
+type Prepare<K, T extends PayloadDef> = Pretty<
+	{ type: Extract<K, string> } & ReturnType<T>
+>;
 
 type Pretty<T> = { [K in keyof T]: T[K] } & {};
 
@@ -143,12 +123,12 @@ function defineState<T>(getInitialState: () => T) {
 	}
 
 	function createAddReducer(
-		defs: ActionDef[],
+		defs: AnyActionDef[],
 		cases: Case[],
-		actions: Record<string, ActionDef>,
+		actions: Record<string, AnyActionDef>,
 	) {
 		//
-		function addReducer(reduce: SomeFn) {
+		function addReducer(reduce: AnyCaseReducer) {
 			const newCase = { defs, reduce };
 			return createAddCase([...cases, newCase], actions);
 		}
@@ -156,15 +136,15 @@ function defineState<T>(getInitialState: () => T) {
 		return addReducer;
 	}
 
-	function createAddCase(cases: Case[], actions: Record<string, ActionDef>) {
+	function createAddCase(cases: Case[], actions: Record<string, AnyActionDef>) {
 		//
 		function addCase(
-			firstArg: string | ActionDef,
-			secondArg: ActionDef,
-			...restArgs: ActionDef[]
+			firstArg: string | AnyActionDef,
+			secondArg: AnyActionDef,
+			...restArgs: AnyActionDef[]
 		) {
 			if (typeof firstArg === "string") {
-				const newDef: ActionDef = (...args) => ({
+				const newDef: AnyActionDef = (...args) => ({
 					type: firstArg,
 					payload: secondArg(...args),
 				});
@@ -197,7 +177,7 @@ function defineState<T>(getInitialState: () => T) {
 
 	const addCase = createAddCase([], {});
 
-	return addCase as AddCase<T, Build<UnknownAction, {}>>;
+	return addCase as AddCase<T, Build<SomeAction, {}>>;
 }
 
 function createMatcher(type: string) {
@@ -229,8 +209,9 @@ const { reducer, actions } = defineState(() => ({
 		case "operations/FAILURE":
 			let x: unknown = action.payload;
 			return state;
+		default:
+			return absurd(action);
 	}
-	return absurd(action);
 })(
 	routine.failure,
 	//
@@ -245,7 +226,7 @@ const { reducer, actions } = defineState(() => ({
 		...state,
 		foo: action.payload.kek.toString(),
 	};
-})("failure")((state) => {
+})("failure")((state, action) => {
 	return {
 		...state,
 		foo: "fail",
