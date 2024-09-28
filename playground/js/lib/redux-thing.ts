@@ -6,16 +6,21 @@ export interface SomeAction extends Action {
 	[extraProps: string]: unknown;
 }
 
-export interface ActionDef<A extends Action = Action, I extends any[] = []> {
-	(...inputs: I): A;
-	type: A["type"];
-	match: (actionLike: Action) => actionLike is A;
+export interface Matchable<T extends Action> {
+	match: (actionLike: Action) => actionLike is T;
 }
 
-export interface AnyActionDef<
-	A extends Action = Action,
-	I extends any[] = any[],
-> extends ActionDef<A, I> {}
+export type InferMatch<M extends Matchable<any>> = M extends Matchable<infer T>
+	? T
+	: never;
+
+export interface ActionDef<A extends Action = Action, I extends any[] = []>
+	extends Matchable<A> {
+	(...inputs: I): A;
+	type: A["type"];
+}
+
+export interface AnyActionDef extends ActionDef<Action, any[]> {}
 
 export interface PayloadDef {
 	(...args: any[]): { payload: any };

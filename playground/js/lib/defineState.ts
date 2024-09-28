@@ -7,36 +7,9 @@ import {
 	Action,
 	SomeAction,
 	ActionDef,
+	Matchable,
+	InferMatch,
 } from "./redux-thing";
-
-const { entries } = Object;
-
-export function composeReducers(
-	reducersObject: Record<string, Reducer<any, any>>,
-) {
-	type State = any;
-	type Action = any;
-	const reducers = entries(reducersObject);
-
-	return function composition(
-		current: State | undefined,
-		action: Action,
-		schedule: SetTask<State>,
-	): State {
-		let next: State = current;
-		for (let [key, reducer] of reducers) {
-			const stateWas = current?.[key];
-			const stateNow = reducer(stateWas, action, schedule); // TODO: scope task api
-			if (stateWas !== stateNow) {
-				if (next === current) {
-					next = { ...current };
-				}
-				next[key] = stateNow;
-			}
-		}
-		return next;
-	};
-}
 
 type CaseReducer<TState, TAction> = (
 	state: TState,
@@ -70,9 +43,9 @@ interface AddCase<TState, B extends Build> {
 		Build<B["action"], B["preparers"] & { [key in N]: () => void }>
 	>;
 
-	<As extends readonly AnyActionDef[]>(
-		...actionCreators: As
-	): AddCaseReducer<TState, ReturnType<As[number]>, B>;
+	<Ms extends readonly Matchable<any>[]>(
+		...actionDefs: Ms
+	): AddCaseReducer<TState, InferMatch<Ms[number]>, B>;
 
 	reducer: Reducer<TState, B["action"]> & {
 		getInitialState: () => TState;
