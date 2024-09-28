@@ -10,20 +10,10 @@ export interface Matchable<T extends Action> {
 	match: (actionLike: Action) => actionLike is T;
 }
 
-export type InferMatch<M extends Matchable<any>> = M extends Matchable<infer T>
-	? T
-	: never;
-
-export interface ActionDef<A extends Action = Action, I extends any[] = []>
+export interface ActionMaker<A extends Action = Action, I extends any[] = []>
 	extends Matchable<A> {
 	(...inputs: I): A;
 	type: A["type"];
-}
-
-export interface AnyActionDef extends ActionDef<Action, any[]> {}
-
-export interface PayloadDef {
-	(...args: any[]): { payload: any };
 }
 
 export interface SetTask<TState> {
@@ -40,7 +30,7 @@ export interface TaskApi<TState> {
 	nextAction: () => Promise<SomeAction>;
 }
 
-export interface Dispatch<TAction = Action, TState = unknown> {
+export interface Dispatch<TAction extends Action = Action, TState = unknown> {
 	(action: TAction): void;
 	<TResult>(task: TaskFn<TState, TResult>): TResult;
 }
@@ -52,3 +42,24 @@ export interface Reducer<TState, TAction> {
 		schedule: SetTask<TState>,
 	): TState;
 }
+
+// Utils
+
+type Pretty<T> = { [K in keyof T]: T[K] } & {};
+
+export type InferMatch<M extends Matchable<any>> = M extends Matchable<infer T>
+	? T
+	: never;
+
+export type AnyActionMaker = ActionMaker<Action, any[]>;
+
+export type AnyActionPartMaker = { (...args: any[]): { payload: any } };
+
+export type MadeAction<TType, TMaker extends AnyActionPartMaker> = Pretty<
+	{ type: Extract<TType, string> } & ReturnType<TMaker>
+>;
+
+export type CompleteActionMaker<
+	TType,
+	TMaker extends AnyActionPartMaker,
+> = ActionMaker<MadeAction<TType, TMaker>, Parameters<TMaker>>;

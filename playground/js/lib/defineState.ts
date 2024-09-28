@@ -1,15 +1,25 @@
-import { createAction } from "@reduxjs/toolkit";
 import {
 	Reducer,
 	SetTask,
-	PayloadDef,
-	AnyActionDef,
+	AnyActionPartMaker,
+	AnyActionMaker,
 	Action,
 	SomeAction,
-	ActionDef,
 	Matchable,
 	InferMatch,
-} from "./redux-thing";
+	MadeAction,
+	CompleteActionMaker,
+} from "./reduxTypes";
+
+interface DefinitionResult<TState, B extends Build> {
+	reducer: Reducer<TState, B["action"]> & {
+		getInitialState: () => TState;
+	};
+
+	actions: {
+		[K in keyof B["makers"]]: CompleteActionMaker<K, B["makers"][K]>;
+	};
+}
 
 type CaseReducer<TState, TAction> = (
 	state: TState,
@@ -19,20 +29,14 @@ type CaseReducer<TState, TAction> = (
 
 type AnyCaseReducer = CaseReducer<any, any>;
 
-interface AddCaseReducer<TState, TAction, B extends Build> {
-	(
-		reducer: CaseReducer<TState, TAction>,
-	): AddCase<TState, Build<B["action"] | TAction, B["preparers"]>>;
-}
-
-interface AddCase<TState, B extends Build> {
-	<TType extends string, TPrep extends PayloadDef>(
+interface AddCase<TState, B extends Build> extends DefinitionResult<TState, B> {
+	<TType extends string, TMaker extends AnyActionPartMaker>(
 		actionType: TType,
-		preparePayload: TPrep,
+		actionPartMaker: TMaker,
 	): AddCaseReducer<
 		TState,
-		Prepare<TType, TPrep>,
-		Build<B["action"], B["preparers"] & { [key in TType]: TPrep }>
+		MadeAction<TType, TMaker>,
+		Build<B["action"], B["makers"] & { [key in TType]: TMaker }>
 	>;
 
 	<N extends string>(
@@ -40,40 +44,29 @@ interface AddCase<TState, B extends Build> {
 	): AddCaseReducer<
 		TState,
 		Action<N>,
-		Build<B["action"], B["preparers"] & { [key in N]: () => void }>
+		Build<B["action"], B["makers"] & { [key in N]: () => void }>
 	>;
 
 	<Ms extends readonly Matchable<any>[]>(
-		...actionDefs: Ms
+		...matchers: Ms
 	): AddCaseReducer<TState, InferMatch<Ms[number]>, B>;
-
-	reducer: Reducer<TState, B["action"]> & {
-		getInitialState: () => TState;
-	};
-
-	actions: {
-		[K in keyof B["preparers"]]: ActionDef<
-			Prepare<K, B["preparers"][K]>,
-			Parameters<B["preparers"][K]>
-		>;
-	};
 }
 
-interface Build<A = unknown, C = Record<string, PayloadDef>> {
+interface AddCaseReducer<TState, TAction, B extends Build> {
+	(
+		reducer: CaseReducer<TState, TAction>,
+	): AddCase<TState, Build<B["action"] | TAction, B["makers"]>>;
+}
+
+interface Build<A = unknown, C = Record<string, AnyActionPartMaker>> {
 	action: A;
-	preparers: C;
+	makers: C;
 }
 
 interface Case {
-	defs: AnyActionDef[];
+	matchers: Matchable<any>[];
 	reduce: AnyCaseReducer;
 }
-
-type Prepare<K, T extends PayloadDef> = Pretty<
-	{ type: Extract<K, string> } & ReturnType<T>
->;
-
-type Pretty<T> = { [K in keyof T]: T[K] } & {};
 
 export function defineState<T>(getInitialState: () => T) {
 	function createReducer(cases: Case[]) {
@@ -83,8 +76,8 @@ export function defineState<T>(getInitialState: () => T) {
 			schedule: SetTask<T>,
 		) {
 			for (const c of cases) {
-				for (const d of c.defs) {
-					if (d.type === action.type) {
+				for (const d of c.matchers) {
+					if (d.match(action)) {
 						const next = c.reduce(state, action, schedule);
 						if (next) {
 							return next;
@@ -99,56 +92,59 @@ export function defineState<T>(getInitialState: () => T) {
 	}
 
 	function createAddReducer(
-		defs: AnyActionDef[],
+		matchers: Matchable<any>[],
 		cases: Case[],
-		actions: Record<string, AnyActionDef>,
+		actions: Record<string, AnyActionMaker>,
 	) {
 		//
 		function addReducer(reduce: AnyCaseReducer) {
-			const newCase = { defs, reduce };
+			const newCase = { matchers, reduce };
 			return createAddCase([...cases, newCase], actions);
 		}
 
 		return addReducer;
 	}
 
-	function createAddCase(cases: Case[], actions: Record<string, AnyActionDef>) {
+	function createAddCase(
+		cases: Case[],
+		actions: Record<string, AnyActionMaker>,
+	) {
 		//
 		function addCase(
-			firstArg: string | AnyActionDef,
-			secondArg: AnyActionDef,
-			...restArgs: AnyActionDef[]
+			firstArg: string | AnyActionMaker,
+			secondArg: AnyActionMaker,
+			...restArgs: AnyActionMaker[]
 		) {
 			if (typeof firstArg === "string") {
-				let newDef: AnyActionDef;
+				let newMaker: AnyActionMaker;
 				const typing = {
 					type: firstArg,
 					match: createMatcher(firstArg),
 				};
 				if (secondArg) {
 					// @ts-ignore
-					newDef = (...args: any[]) => ({
+					newMaker = (...args: any[]) => ({
 						type: firstArg,
 						payload: secondArg(...args),
 					});
 				} else {
 					// @ts-ignore
-					newDef = () => ({
+					newMaker = () => ({
 						type: firstArg,
 					});
 				}
-				newDef.type = firstArg;
-				newDef.match = createMatcher(firstArg);
+				newMaker.type = firstArg;
+				newMaker.match = createMatcher(firstArg);
 
-				return createAddReducer([newDef], cases, {
+				return createAddReducer([newMaker], cases, {
 					...actions,
-					[firstArg]: newDef,
+					[firstArg]: newMaker,
 				});
 			} else {
-				const defs = [firstArg];
-				if (secondArg) defs.push(secondArg);
-				if (restArgs.length) defs.push(...restArgs);
-				return createAddReducer(defs, cases, actions);
+				const matchers = [firstArg];
+				if (secondArg) matchers.push(secondArg);
+				if (restArgs.length) matchers.push(...restArgs);
+				return createAddReducer(matchers, cases, actions);
 			}
 		}
 
@@ -169,69 +165,6 @@ export function defineState<T>(getInitialState: () => T) {
 	return addCase as AddCase<T, Build<SomeAction, {}>>;
 }
 
-function createMatcher(type: string) {
+export function createMatcher(type: string) {
 	return (ac: Action): ac is Action => ac.type === type;
 }
-
-export const withPayload = <T>(payload: T) => ({ payload });
-
-// export const routine = ((type) => ({
-// 	aborted: createAction(`${type}/ABORTED`),
-// 	trigger: createAction(`${type}/TRIGGER`),
-// 	request: createAction(`${type}/REQUEST`),
-// 	success: createAction(`${type}/SUCCESS`, withPayload<{ bar: string }>),
-// 	failure: createAction(`${type}/FAILURE`, (error: unknown) => ({
-// 		payload: error,
-// 	})),
-// }))("operations" as const);
-
-// const { reducer, actions } = defineState(() => ({
-// 	foo: "bar",
-// }))(
-// 	routine.success,
-// 	routine.failure,
-// )((state, action) => {
-// 	switch (action.type) {
-// 		case "operations/SUCCESS":
-// 			console.log(action.payload.bar);
-// 			return state;
-// 		case "operations/FAILURE":
-// 			let x: unknown = action.payload;
-// 			return state;
-// 		default:
-// 			return absurd(action);
-// 	}
-// })(
-// 	routine.failure,
-// 	//
-// )((state) => {
-// 	return {
-// 		foo: state.foo,
-// 	};
-// })("trigger", (kek: number) => ({
-// 	payload: { kek },
-// }))((state, action) => {
-// 	return {
-// 		...state,
-// 		foo: action.payload.kek.toString(),
-// 	};
-// })("failure")((state, action) => {
-// 	return {
-// 		...state,
-// 		foo: "fail",
-// 	};
-// });
-
-// reducer({ foo: "" }, { type: "failure" }, () => {}).foo;
-
-// let x: "failure" = actions.failure().type;
-// let y: number = actions.trigger(1).payload.kek;
-
-// function defineActions<N extends string, R extends Record<string, PayloadDef>>(
-// 	prefix: N,
-// 	builder: (buildUtils: {}) => R,
-// ) {}
-
-// const absurd = (_: never): never => {
-// 	throw new Error("absurd");
-// };

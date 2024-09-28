@@ -1,5 +1,6 @@
 import { describe, expect, test, mock } from "bun:test";
-import { defineState, withPayload } from "./defineState";
+import { defineState } from "./defineState";
+import { withPayload } from "./defineActions";
 import { createAction } from "@reduxjs/toolkit";
 import { doNothing as noop } from "./utils";
 import {
@@ -10,7 +11,7 @@ import {
 	TrueCases,
 	Equal,
 } from "type-testing";
-import { Action } from "./redux-thing";
+import { Action } from "./reduxTypes";
 
 export const act = {
 	p_any: createAction(`p_any`, withPayload<any>),

@@ -1,79 +1,110 @@
+import {
+	Action,
+	AnyActionMaker,
+	AnyActionPartMaker,
+	CompleteActionMaker,
+} from "./reduxTypes";
+
 const { assign, entries, fromEntries } = Object;
 
-export function defineActionsFromBuilders<Builders extends Record<string, any>>(
-	builders: Builders,
-) {
-	return function defineActions<
-		TPrefix extends string,
-		TFactories extends PayloadDefs,
-	>(prefix: TPrefix, factories: (utils: Builders) => TFactories) {
-		const brand = Symbol();
-		type Namepace = ActionDefRecord<TPrefix, TFactories>;
-		type Actions = ReturnType<Namepace[keyof Namepace]>;
+export const withPayload = <T>(payload: T) => ({ payload });
 
-		const actions = fromEntries(
-			entries(factories(builders)).map(([name, prepare]) => {
-				const type = `${prefix}/${name}`;
-				const match = (msg: { type: string }) => {
-					return "brand" in msg && msg.brand == brand && msg.type === type;
-				};
-				const msgMaker = assign(
-					(...args: any[]) => ({
-						...prepare(...args),
-						type: type,
-						brand: brand,
-					}),
-					{ type, match },
-				);
-				return [name, msgMaker];
-			}),
-		) as Namepace;
-
-		const isFromThisNamepace = (msg: { type: string }): msg is Actions => {
-			return "brand" in msg && msg.brand === brand;
-		};
-
-		return [actions, isFromThisNamepace] as const;
+function defineAction<TType extends string>(type: TType) {
+	return <TMaker extends (...args: any[]) => Action>(
+		makeActionMaker: (
+			make: <const P>(payload: P) => { type: TType; payload: P },
+		) => TMaker,
+	) => {
+		return assign(
+			makeActionMaker((payload) => ({
+				payload,
+				type,
+			})),
+			{
+				type,
+				match: (action: Action): action is ReturnType<TMaker> =>
+					action.type === type,
+			},
+		);
 	};
 }
 
-type PayloadDef = (...args: any[]) => { payload?: any };
-type PayloadDefs = Record<string, PayloadDef>;
+function defineActionKind<
+	TPrefix extends string,
+	TMakers extends Record<string, AnyActionPartMaker>,
+>(prefix: TPrefix, actionPartMakers: TMakers) {
+	type ActionKindMakers = {
+		[K in keyof TMakers]: CompleteActionMaker<
+			WithPrefix<TPrefix, K>,
+			TMakers[K]
+		>;
+	};
+	type ActionKind = ReturnType<ActionKindMakers[keyof ActionKindMakers]>;
+
+	const KIND = Symbol();
+
+	const actionMakers = fromEntries(
+		entries(actionPartMakers).map(([name, prepare]) => {
+			const match = (action: Action): action is AnyActionMaker => {
+				return matchKind(action) && action.type === type;
+			};
+			const type = `${prefix}/${name}`;
+			const actionMaker: AnyActionMaker = assign(
+				(...args: any[]) => ({
+					...prepare(...args),
+					type: type,
+					kind: KIND,
+				}),
+				{ type, match },
+			);
+			return [name, actionMaker];
+		}),
+	) satisfies {
+		[key: string]: AnyActionMaker;
+	} as ActionKindMakers;
+
+	const matchKind = (action: Action): action is ActionKind => {
+		return "kind" in action && action.kind === KIND;
+	};
+
+	return { ...actionMakers, match: matchKind };
+}
 
 type WithPrefix<P extends string, A> = `${P}/${Extract<A, string>}`;
 
-type NamespacedAction<
-	P extends string,
-	K extends keyof T,
-	T extends PayloadDefs,
-> = {
-	type: WithPrefix<P, K>;
-	brand: symbol;
-} & ReturnType<T[K]>;
-
-type NamespacedActionCreator<
-	P extends string,
-	K extends keyof T,
-	T extends PayloadDefs,
-> = {
-	(...args: Parameters<T[K]>): NamespacedAction<P, K, T>;
-	type: WithPrefix<P, K>;
-	match: (msg: {
-		type: string;
-	}) => msg is NamespacedAction<P, K, T>;
-};
-
-type ActionDefRecord<P extends string, T extends PayloadDefs> = {
-	[K in keyof T]: NamespacedActionCreator<P, K, T>;
-};
-
-export const defineActions = defineActionsFromBuilders({
-	payload: <T>(payload: T) => ({ payload }),
-	message: () => ({}),
-	routine: () => ({}),
+const appActionKind = defineActionKind("thingy", {
+	kek: withPayload<void>,
+	lol: withPayload<{ foo: "bar" }>,
 });
 
-const [acts] = defineActions("thingy", (util) => ({
-	kek: util.message,
-	lol: util.payload<{ foo: "bar" }>,
-}));
+appActionKind.kek().type === "thingy/kek";
+appActionKind.lol({ foo: "bar" }).payload.foo;
+
+type Fields = {
+	username: string;
+	inviteCode: number;
+	consents: number[];
+};
+
+type ChangePayload = {
+	[K in keyof Fields]: [name: K, value: Fields[K]];
+}[keyof Fields];
+
+const genAction = defineAction("make-stuff")((pack) => {
+	return <F extends keyof Fields>(name: F, value: Fields[F]) =>
+		pack([name, value] as ChangePayload);
+});
+
+const nonGenAction = defineAction("make-stuff")(
+	(pack) => (name: string, thing: number) =>
+		pack({
+			name,
+			thing,
+		}),
+);
+
+const testAc = { type: "kek" };
+
+if (genAction.match(testAc)) {
+	testAc;
+}
