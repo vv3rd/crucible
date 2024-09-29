@@ -1,1 +1,4 @@
 .direnv
+!shell.nix
+!flake.lock
+!flake.nix
