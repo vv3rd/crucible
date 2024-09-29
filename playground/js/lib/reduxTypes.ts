@@ -55,7 +55,9 @@ export type WithPrefix<P, A> = `${Extract<P, string>}/${Extract<A, string>}`;
 
 export type AnyActionMaker = ActionMaker<Action, any[]>;
 
-export type AnyActionPartMaker = { (...args: any[]): { payload: any } };
+export type AnyActionPartMaker =
+	| { (...args: any[]): { payload: any } }
+	| { (): void };
 
 export type MadeAction<TType, TMaker extends AnyActionPartMaker> = Pretty<
 	{ type: Extract<TType, string> } & ReturnType<TMaker>

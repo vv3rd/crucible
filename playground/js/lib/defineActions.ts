@@ -8,9 +8,10 @@ import {
 
 const { assign, entries, fromEntries } = Object;
 
+export const noPayload = () => {};
 export const withPayload = <T>(payload: T) => ({ payload });
 
-function defineAction<TType extends string>(type: TType) {
+export function defineAction<TType extends string>(type: TType) {
 	return <TMaker extends (...args: any[]) => Action>(
 		makeActionMaker: (
 			make: <const P>(payload: P) => { type: TType; payload: P },
@@ -30,7 +31,7 @@ function defineAction<TType extends string>(type: TType) {
 	};
 }
 
-function defineActionKind<
+export function defineActionKind<
 	TPrefix extends string,
 	TMakers extends { [key: string]: AnyActionPartMaker; match?: never },
 >(prefix: TPrefix, actionPartMakers: TMakers) {
@@ -69,41 +70,4 @@ function defineActionKind<
 	};
 
 	return { ...actionMakers, match: matchKind };
-}
-
-const appActionKind = defineActionKind("thingy", {
-	kek: withPayload<void>,
-	lol: withPayload<{ foo: "bar" }>,
-});
-
-appActionKind.kek().type === "thingy/kek";
-appActionKind.lol({ foo: "bar" }).payload.foo;
-
-type Fields = {
-	username: string;
-	inviteCode: number;
-	consents: number[];
-};
-
-type ChangePayload = {
-	[K in keyof Fields]: [name: K, value: Fields[K]];
-}[keyof Fields];
-
-const genAction = defineAction("make-stuff")((pack) => {
-	return <F extends keyof Fields>(name: F, value: Fields[F]) =>
-		pack([name, value] as ChangePayload);
-});
-
-const nonGenAction = defineAction("make-stuff")(
-	(pack) => (name: string, thing: number) =>
-		pack({
-			name,
-			thing,
-		}),
-);
-
-const testAc = { type: "kek" };
-
-if (genAction.match(testAc)) {
-	testAc;
 }
