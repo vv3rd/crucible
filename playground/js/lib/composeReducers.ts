@@ -1,23 +1,30 @@
-import { Reducer, SetTask } from "./redux-thing";
+import { identity } from "rxjs";
+import { Reducer, SetTask } from "./reduxTypes";
 
 const { entries } = Object;
 
-export function composeReducers(
+function composeReducersImpl(
 	reducersObject: Record<string, Reducer<any, any>>,
 ) {
-	type State = any;
-	type Action = any;
+	type TState = any;
+	type TAction = any;
+
 	const reducers = entries(reducersObject);
 
-	return function composition(
-		current: State | undefined,
-		action: Action,
-		schedule: SetTask<State>,
-	): State {
-		let next: State = current;
+	if (reducers.length === 0) {
+		return identity;
+	}
+
+	return function composedReducer(
+		current: TState | undefined,
+		action: TAction,
+		schedule: SetTask<TState>,
+	): TState {
+		let next: TState = current;
 		for (let [key, reducer] of reducers) {
+			const scheduleScoped = scopeSchedulerUnder(key, schedule);
 			const stateWas = current?.[key];
-			const stateNow = reducer(stateWas, action, schedule); // TODO: scope task api
+			const stateNow = reducer(stateWas, action, scheduleScoped);
 			if (stateWas !== stateNow) {
 				if (next === current) {
 					next = { ...current };
@@ -27,4 +34,35 @@ export function composeReducers(
 		}
 		return next;
 	};
+
+	function scopeSchedulerUnder(
+		key: string,
+		schedule: SetTask<TState>,
+	): SetTask<TState> {
+		return (taksFn) => {
+			schedule(({ getState, ...taskApi }) => {
+				const scopedApi = {
+					...taskApi,
+					getState: () => getState()[key],
+				};
+				return taksFn(scopedApi);
+			});
+		};
+	}
 }
+
+type ActionFromReducer<R> = R extends Reducer<any, infer A> ? A : never;
+
+type StateFromReducersRecord<M> = M[keyof M] extends Reducer<any, any>
+	? { [P in keyof M]: M[P] extends Reducer<infer S, any> ? S : never }
+	: never;
+
+type ReducerFromCombination<M> = M[keyof M] extends Reducer<any, any>
+	? Reducer<StateFromReducersRecord<M>, ActionFromReducer<M[keyof M]>>
+	: never;
+
+export const composeReducers = composeReducersImpl as <
+	M extends Record<string, Reducer<any, any>>,
+>(
+	reducersRecord: M,
+) => ReducerFromCombination<M>;

@@ -1,3 +1,6 @@
+export function identity<T>(thing: T): T {
+	return thing
+}
 export function doNothing() {}
 
 export function runOnce<T extends (...a: any[]) => any>(func: T): T {
