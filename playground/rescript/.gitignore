@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+
+
+# ReScript
+/lib/
+.bsb.lock
+.merlin
+src/**/*.res.mjs
