@@ -1,5 +1,5 @@
 import { identity } from "rxjs";
-import { Reducer, SetTask } from "./reduxTypes";
+import { Reducer, SetTask, SomeAction } from "./reduxTypes";
 
 const { entries } = Object;
 
@@ -12,7 +12,8 @@ function composeReducersImpl(
 	const reducers = entries(reducersObject);
 
 	if (reducers.length === 0) {
-		return identity;
+		const emptyState = {};
+		return () => emptyState;
 	}
 
 	return function composedReducer(
@@ -58,7 +59,10 @@ type StateFromReducersRecord<M> = M[keyof M] extends Reducer<any, any>
 	: never;
 
 type ReducerFromCombination<M> = M[keyof M] extends Reducer<any, any>
-	? Reducer<StateFromReducersRecord<M>, ActionFromReducer<M[keyof M]>>
+	? Reducer<
+			StateFromReducersRecord<M>,
+			ActionFromReducer<M[keyof M]> | SomeAction
+		>
 	: never;
 
 export const composeReducers = composeReducersImpl as <
