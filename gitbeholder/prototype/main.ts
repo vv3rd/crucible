@@ -169,26 +169,8 @@ export namespace Drawing {
 		TurnNW = "╯",
 	}
 
-	// biome-ignore format: looks better this way
-	export function drawSlice(
-		slice: BranchSlice,
-		columnOfCurrentCommit: number,
-	): string {
-		let column = slice.branch.column
-		// FIXME: doesn' account for cases like @─│─╮ and such
-		if (column < columnOfCurrentCommit) switch (slice.type) {
-			case BranchSliceType.Ongoing: return Gliph.EdgeV + Gliph.Gap;
-			case BranchSliceType.Started: return Gliph.TurnNE + Gliph.EdgeH;
-			case BranchSliceType.Merging: return Gliph.TurnSE + Gliph.EdgeH;
-		}
-		if (column > columnOfCurrentCommit) switch (slice.type) {
-			case BranchSliceType.Ongoing: return Gliph.Gap + Gliph.EdgeV;
-			case BranchSliceType.Started: return Gliph.EdgeH + Gliph.TurnNW;
-			case BranchSliceType.Merging: return Gliph.EdgeH + Gliph.TurnSW;
-		}
-		return Gliph.Node;
-	}
-
+	// FIXME: current implementation doesn't work with octopus commits
+	// need to account for casees when merging and starting branches have same position
 	export function drawRow(row: Row) {
 		const slices = row.snapshow
 			.slice()
@@ -198,11 +180,56 @@ export namespace Drawing {
 			(slice) => slice.type === BranchSliceType.Current,
 		);
 
-		const rowDrawing = slices
-			.map((slice) => drawSlice(slice, columnOfCurrentCommit))
-			.join("");
+		let rowDrawing = new Array<string>(slices.length);
+		let gap = Gliph.Gap;
 
-		return rowDrawing;
+		for (let i = 0; i < columnOfCurrentCommit; i++) {
+			gap = getGap(slices[i], gap);
+			rowDrawing[i] = drawSliceBeforeCommit(slices[i], gap)!;
+		}
+		{
+			gap = Gliph.Gap;
+			rowDrawing[columnOfCurrentCommit] = Gliph.Node;
+		}
+		for (let i = slices.length - 1; i > columnOfCurrentCommit; i--) {
+			gap = getGap(slices[i], gap);
+			rowDrawing[i] = drawSliceAfterCommit(slices[i], gap)!;
+		}
+
+		return rowDrawing.join("");
+	}
+
+	function getGap(slice: BranchSlice, currentGap: Gliph) {
+		if (
+			slice.type === BranchSliceType.Merging ||
+			slice.type === BranchSliceType.Started
+		) {
+			return Gliph.EdgeH;
+		} else {
+			return currentGap;
+		}
+	}
+
+	function drawSliceAfterCommit(slice: BranchSlice, gap: Gliph) {
+		switch (slice.type) {
+			case BranchSliceType.Ongoing:
+				return gap + Gliph.EdgeV;
+			case BranchSliceType.Started:
+				return gap + Gliph.TurnNW;
+			case BranchSliceType.Merging:
+				return gap + Gliph.TurnSW;
+		}
+	}
+
+	function drawSliceBeforeCommit(slice: BranchSlice, gap: Gliph) {
+		switch (slice.type) {
+			case BranchSliceType.Ongoing:
+				return Gliph.EdgeV + gap;
+			case BranchSliceType.Started:
+				return Gliph.TurnNE + gap;
+			case BranchSliceType.Merging:
+				return Gliph.TurnSE + gap;
+		}
 	}
 }
 
