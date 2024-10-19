@@ -107,9 +107,9 @@ export function DrawGraph(history: Git.History): Drawing.Row[] {
 			} //
 			else {
 				/* 
-    │ │             │ │ │   // TODO: find better way to draw this
-  ╭─@─╯ <- this or ╭╰─@─╯╮╮ <- this and etc. 
-  │ │              ╰╮ │ ╭╯│
+    │ │            ╭╯ │ │   // TODO: find better way to draw this
+  ╭─@─╯ <- this or ╰╭─@─╯╮╮ <- this and etc. 
+  │ │               │ │ ╭╯│
   @ │               │ │ @ │
   │ │               │ │ │ │
   │ @               │ │ │ @
@@ -172,28 +172,38 @@ export namespace Drawing {
 	// FIXME: current implementation doesn't work with octopus commits
 	// need to account for casees when merging and starting branches have same position
 	export function drawRow(row: Row) {
-		const slices = row.snapshow
-			.slice()
-			.sort((a, b) => a.branch.column - b.branch.column);
+		const columns = Map.groupBy(row.snapshow, (slice) => slice.branch.column);
 
-		const columnOfCurrentCommit = row.snapshow.findIndex(
-			(slice) => slice.type === BranchSliceType.Current,
-		);
+		const {
+			branch: { column: columnOfCurrentCommit },
+		} = row.snapshow.find((slice) => slice.type === BranchSliceType.Current)!;
 
-		let rowDrawing = new Array<string>(slices.length);
+		let rowDrawing = new Array<string>(columns.size);
 		let gap = Gliph.Gap;
 
 		for (let i = 0; i < columnOfCurrentCommit; i++) {
-			gap = getGap(slices[i], gap);
-			rowDrawing[i] = drawSliceBeforeCommit(slices[i], gap)!;
+			const slices = columns.get(i)!;
+			if (slices.length === 2) {
+				// TODO: somehow handle drawing starting and merging branch at the same column
+			} else {
+				const [slice] = slices;
+				gap = getGap(slice, gap);
+				rowDrawing[i] = drawSliceBeforeCommit(slice, gap)!;
+			}
 		}
 		{
 			gap = Gliph.Gap;
 			rowDrawing[columnOfCurrentCommit] = Gliph.Node;
 		}
-		for (let i = slices.length - 1; i > columnOfCurrentCommit; i--) {
-			gap = getGap(slices[i], gap);
-			rowDrawing[i] = drawSliceAfterCommit(slices[i], gap)!;
+		for (let i = columns.size - 1; i > columnOfCurrentCommit; i--) {
+			const slices = columns.get(i)!;
+			if (slices.length === 2) {
+				// TODO: somehow handle drawing starting and merging branch at the same column
+			} else {
+				const [slice] = slices;
+				gap = getGap(slice, gap);
+				rowDrawing[i] = drawSliceAfterCommit(slice, gap)!;
+			}
 		}
 
 		return rowDrawing.join("");
