@@ -30,6 +30,18 @@ export interface TaskApi<TState> {
 	nextAction: () => Promise<SomeAction>;
 }
 
+export namespace TaskApi {
+	export const scoped = <A, B>(
+		taskApi: TaskApi<A>,
+		seletor: (state: A) => B,
+	): TaskApi<B> => {
+		return {
+			...taskApi,
+			getState: () => seletor(taskApi.getState()),
+		};
+	};
+}
+
 export interface Dispatch<TAction extends Action = Action, TState = unknown> {
 	(action: TAction): void;
 	<TResult>(task: TaskFn<TState, TResult>): TResult;
@@ -44,6 +56,9 @@ export interface Reducer<TState, TAction> {
 }
 
 // Utils
+
+export type Real = NonNullable<unknown>;
+export type Dict<T> = Record<string, T>;
 
 type Pretty<T> = { [K in keyof T]: T[K] } & {};
 

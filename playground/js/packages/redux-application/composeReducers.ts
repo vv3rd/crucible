@@ -1,4 +1,3 @@
-import { identity } from "rxjs";
 import { Reducer, SetTask, SomeAction } from "./reduxTypes";
 
 const { entries } = Object;
