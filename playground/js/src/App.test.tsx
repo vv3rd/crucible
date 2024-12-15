@@ -1,10 +1,10 @@
 import { expect, describe, test } from "bun:test";
-import {render, screen} from '@testing-library/react'
+import { render, screen, act } from "@testing-library/react";
 import { App } from "./App";
 
 describe("App", () => {
-  test("render", () => {
-    render(<App />)
-    expect(screen.getByText(/Hello/)).toBeInTheDocument()
+  test("render", async () => {
+    await act(() => render(<App />));
+    expect(screen.getByText(/Hello/)).toBeInTheDocument();
   });
 });
