@@ -68,7 +68,7 @@ interface Case {
 	reduce: AnyCaseReducer;
 }
 
-export function defineState<T>(getInitialState: () => T) {
+export function buildReducer<T>(getInitialState: () => T) {
 	function createReducer(cases: Case[]) {
 		function finalReducer(
 			state: T | undefined = getInitialState(),
@@ -117,10 +117,6 @@ export function defineState<T>(getInitialState: () => T) {
 		) {
 			if (typeof firstArg === "string") {
 				let newMaker: AnyActionMaker;
-				const typing = {
-					type: firstArg,
-					match: createMatcher(firstArg),
-				};
 				if (secondArg) {
 					// @ts-ignore
 					newMaker = (...args: any[]) => ({

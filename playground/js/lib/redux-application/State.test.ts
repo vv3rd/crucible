@@ -1,5 +1,5 @@
 import { describe, expect, test, mock } from "bun:test";
-import { defineState } from "./State";
+import { buildReducer } from "./State";
 import { defineActionKind, withPayload } from "./Action";
 import { doNothing as noop } from "./utils";
 import {
@@ -32,7 +32,7 @@ const InitAction = { type: "init" + Math.random() };
 
 describe("defineState", () => {
 	test("no cases", () => {
-		const { reducer, actions } = defineState(getInitialState);
+		const { reducer, actions } = buildReducer(getInitialState);
 		expect(actions).toStrictEqual({});
 
 		const state = reducer(undefined, InitAction, noop);
@@ -43,7 +43,7 @@ describe("defineState", () => {
 
 	test("defined actionns", () => {
 		const spy = mock();
-		const build = defineState(() => ({
+		const build = buildReducer(() => ({
 			...getInitialState(),
 		}))("trigger")((state, action) => {
 			type _t1 = FalseCases<
@@ -86,7 +86,7 @@ describe("defineState", () => {
 
 	test("external actions", () => {
 		const spy = mock();
-		const { reducer, actions } = defineState(
+		const { reducer, actions } = buildReducer(
 			getInitialState, //
 		)(act.p_any)((_, action) => {
 			type _ = Expect<IsAny<typeof action.payload>>;
