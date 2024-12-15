@@ -33,7 +33,7 @@ const InitAction = { type: "init" + Math.random() };
 describe("defineState", () => {
 	test("no cases", () => {
 		const { reducer, actions } = defineState(getInitialState);
-		expect(actions).toBeEmptyObject();
+		expect(actions).toStrictEqual({});
 
 		const state = reducer(undefined, InitAction, noop);
 		expect(state).toEqual(getInitialState());
@@ -97,7 +97,8 @@ describe("defineState", () => {
 		})(act.p_array)((_, action) => {
 			type _ = Expect<Equal<typeof action.payload, unknown[]>>;
 			spy(action);
-			expect(action.payload).toBeArray();
+			expect(action.payload).toBeInstanceOf(Array);
+
 		})(act.p_real)((_, action) => {
 			type _ = Expect<Equal<typeof action.payload, {}>>;
 			spy(action);
@@ -118,7 +119,7 @@ describe("defineState", () => {
 			expect(action.payload).toBeUndefined();
 		});
 
-		expect(actions).toBeEmptyObject();
+		expect(actions).toStrictEqual({});
 
 		const dispatched = [
 			act.p_object({ foo: "bar" }),

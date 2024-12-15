@@ -5,7 +5,7 @@ pkgs.mkShell {
   packages = [
     pkgs.bun
     pkgs.biome
-    pkgs.nodejs
+    pkgs.nodejs_22
   ];
 
   shellHook = ''

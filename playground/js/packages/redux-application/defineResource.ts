@@ -141,7 +141,7 @@ function requireResource<T, R>(
 	context: ResoruceTaskContext<R>,
 ): TaskFn<TGlobalState> {
 	const key = sortStringify(inputs);
-	const selectOwnState = (state: TGlobalState): Resource<R> => state.cache[key];
+	const selectOwnState = (state: TGlobalState): Resource<R> => state.cache[key]!;
 
 	return async function runnerWithCache(taskApi: TaskApi<TGlobalState>) {
 		const runnningTaskPromise = context.promisesCache.get(key);

@@ -16,13 +16,3 @@ type AgentValueSelector = <TAgentValue>(
 	agent: AgentToken<AgentImpl<TAgentValue, any>>,
 ) => TAgentValue;
 
-const getDerivedAgent =
-	<TGlobalState>(
-		resolve: <A extends AgentImpl<any, any>>(agentToken: AgentToken<A>) => A,
-	) =>
-	<TResult>(describeDerivition: (select: AgentValueSelector) => TResult) =>
-	(state: TGlobalState) => {
-		const select: AgentValueSelector = (agentToken) => {
-			const agentImpl = resolve(agentToken);
-		};
-	};

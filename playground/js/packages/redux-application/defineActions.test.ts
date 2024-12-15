@@ -47,17 +47,17 @@ describe("defineActionKind", () => {
 		}
 		expect(spy).toBeCalledTimes(2);
 
-		expect(action.justType.match(gotPayloadAction)).toBeFalse();
-		expect(action.gotPayload.match(justTypeAction)).toBeFalse();
+		expect(action.justType.match(gotPayloadAction)).toBe(false);
+		expect(action.gotPayload.match(justTypeAction)).toBe(false);
 
-		expect(
-			action.match(gotPayloadAction) && action.match(justTypeAction),
-		).toBeTrue();
+		expect(action.match(gotPayloadAction) && action.match(justTypeAction)).toBe(
+			true,
+		);
 
 		const someAction1 = { type: "has-random-symbol", kind: Symbol() };
-		expect(action.match(someAction1)).toBeFalse();
+		expect(action.match(someAction1)).toBe(false);
 		const someAction2 = { type: "just-other-type" };
-		expect(action.match(someAction2)).toBeFalse();
+		expect(action.match(someAction2)).toBe(false);
 
 		if (action.match(someAction2)) {
 			type IsOneOf<A> = A extends typeof someAction2 ? true : false;
@@ -72,5 +72,3 @@ describe("defineActionKind", () => {
 		}
 	});
 });
-
-describe("defineAction", () => {});

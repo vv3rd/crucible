@@ -1,26 +1,5 @@
-import { test, expect } from "bun:test";
 import { doNothing } from "./utils";
 import type * as React from "react";
-
-test("defineActor", () => {
-	const { reduce: actor, select: selector } = defineActor("hehe", (use) => {
-		const [num, setNum] = use(State(() => 123));
-
-		const [str, setStr] = use(State(""));
-
-		return {
-			str,
-			num,
-			setNum,
-			setStr,
-		};
-	});
-
-	const out = actor();
-	const data = selector(out);
-
-	console.log({ out, data });
-});
 
 /*
 
