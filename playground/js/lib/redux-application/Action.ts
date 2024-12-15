@@ -17,17 +17,16 @@ export function defineAction<TType extends string>(type: TType) {
 			make: <const P>(payload: P) => { type: TType; payload: P },
 		) => TMaker,
 	) => {
-		return assign(
-			makeActionMaker((payload) => ({
-				payload,
-				type,
-			})),
-			{
-				type,
-				match: (action: Action): action is ReturnType<TMaker> =>
-					action.type === type,
-			},
-		);
+		const actionMaker = makeActionMaker((payload) => ({
+			payload,
+			type,
+		}));
+		const matcher = (action: Action): action is ReturnType<TMaker> =>
+			action.type === type;
+		return assign(actionMaker, {
+			type,
+			match: matcher,
+		});
 	};
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test, mock } from "bun:test";
-import { defineState } from "./defineState";
-import { defineActionKind, withPayload } from "./defineActions";
+import { defineState } from "./State";
+import { defineActionKind, withPayload } from "./Action";
 import { doNothing as noop } from "./utils";
 import {
 	Expect,
@@ -86,9 +86,9 @@ describe("defineState", () => {
 
 	test("external actions", () => {
 		const spy = mock();
-		const { reducer, actions } = defineState(() => ({
-			...getInitialState(),
-		}))(act.p_any)((_, action) => {
+		const { reducer, actions } = defineState(
+			getInitialState, //
+		)(act.p_any)((_, action) => {
 			type _ = Expect<IsAny<typeof action.payload>>;
 		})(act.p_object)((_, action) => {
 			type _ = Expect<Equal<typeof action.payload, object>>;
@@ -98,7 +98,6 @@ describe("defineState", () => {
 			type _ = Expect<Equal<typeof action.payload, unknown[]>>;
 			spy(action);
 			expect(action.payload).toBeInstanceOf(Array);
-
 		})(act.p_real)((_, action) => {
 			type _ = Expect<Equal<typeof action.payload, {}>>;
 			spy(action);
