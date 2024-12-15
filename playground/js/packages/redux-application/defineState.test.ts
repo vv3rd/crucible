@@ -1,7 +1,6 @@
 import { describe, expect, test, mock } from "bun:test";
 import { defineState } from "./defineState";
-import { withPayload } from "./defineActions";
-import { createAction } from "@reduxjs/toolkit";
+import { defineActionKind, withPayload } from "./defineActions";
 import { doNothing as noop } from "./utils";
 import {
 	Expect,
@@ -13,17 +12,17 @@ import {
 } from "type-testing";
 import { Action } from "./reduxTypes";
 
-export const act = {
-	p_any: createAction(`p_any`, withPayload<any>),
-	p_object: createAction(`p_object`, withPayload<object>),
-	p_array: createAction(`p_array`, withPayload<unknown[]>),
-	p_real: createAction(`p_real`, withPayload<{}>),
-	p_undefined: createAction(`o_undefined`, withPayload<undefined>),
-	p_null: createAction(`o_null`, withPayload<null>),
-	p_unknown: createAction(`p_unknown`, withPayload<unknown>),
-	p_void: createAction(`p_void`, withPayload<void>),
-	p_none: createAction("o_none"),
-};
+const act = defineActionKind("", {
+	p_any: withPayload<any>,
+	p_object: withPayload<object>,
+	p_array: withPayload<unknown[]>,
+	p_real: withPayload<{}>,
+	p_undefined: withPayload<undefined>,
+	p_null: withPayload<null>,
+	p_unknown: withPayload<unknown>,
+	p_void: withPayload<void>,
+	p_none: () => ({}),
+});
 
 const getInitialState = () => ({
 	test: 123,
@@ -117,10 +116,6 @@ describe("defineState", () => {
 			type _ = Expect<Equal<typeof action.payload, void>>;
 			spy(action);
 			expect(action.payload).toBeUndefined();
-		})(act.p_none)((_, action) => {
-			type _ = Expect<Equal<typeof action.payload, undefined>>;
-			spy(action);
-			expect(action.payload).toBeUndefined();
 		});
 
 		expect(actions).toBeEmptyObject();
@@ -132,7 +127,6 @@ describe("defineState", () => {
 			act.p_undefined(undefined),
 			act.p_null(null),
 			act.p_void(),
-			act.p_none(),
 		];
 		for (const action of dispatched) {
 			reducer(undefined, action, noop);

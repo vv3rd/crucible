@@ -1,6 +1,6 @@
 import { defineActionKind } from "./defineActions";
 import { TaskApi, TaskFn, Dict } from "./reduxTypes";
-import { nanoid } from "@reduxjs/toolkit";
+import { nanoid } from "nanoid";
 import { sortStringify } from "./utils";
 
 enum ResourceStatus {
@@ -8,7 +8,7 @@ enum ResourceStatus {
 	Pending,
 	Receiving,
 	Failed,
-	Done,
+	Closed,
 }
 
 enum TaskStatus {
@@ -23,7 +23,7 @@ type ResourceResultsForStatus<R> = {
 	[ResourceStatus.Pending]: ResultsShape<undefined, undefined>;
 	[ResourceStatus.Receiving]: ResultsShape<R, undefined>;
 	[ResourceStatus.Failed]: ResultsShape<R | undefined, unknown>;
-	[ResourceStatus.Done]: ResultsShape<R, undefined>;
+	[ResourceStatus.Closed]: ResultsShape<R, undefined>;
 };
 type DataForStatus<
 	S extends ResourceStatus,
@@ -52,8 +52,8 @@ interface InitialResource<R> extends ResourceLike<R> {
 interface PendingResource<R> extends ResourceLike<R> {
 	status: ResourceStatus.Pending;
 }
-interface DoneResource<R> extends ResourceLike<R> {
-	status: ResourceStatus.Done;
+interface ClosedResource<R> extends ResourceLike<R> {
+	status: ResourceStatus.Closed;
 }
 interface ReceivingResource<R> extends ResourceLike<R> {
 	status: ResourceStatus.Receiving;
@@ -67,22 +67,25 @@ export type Resource<R> =
 	| PendingResource<R>
 	| ReceivingResource<R>
 	| FailedResource<R>
-	| DoneResource<R>;
+	| ClosedResource<R>;
 
 namespace Resource {
 	type PredicatedBy<Fn> = Fn extends (arg: any) => arg is infer T ? T : never;
 	export const isResolved = <R>(
 		resource: Resource<R>,
-	): resource is ReceivingResource<R> | DoneResource<R> => {
+	): resource is ReceivingResource<R> | ClosedResource<R> => {
 		return (
 			resource.status === ResourceStatus.Receiving ||
-			resource.status === ResourceStatus.Done
+			resource.status === ResourceStatus.Closed
 		);
 	};
 
 	export const isSettled = <R>(
 		resource: Resource<R>,
-	): resource is ReceivingResource<R> | FailedResource<R> | DoneResource<R> => {
+	): resource is
+		| ReceivingResource<R>
+		| FailedResource<R>
+		| ClosedResource<R> => {
 		return (
 			resource.status !== ResourceStatus.Initial &&
 			resource.status !== ResourceStatus.Pending
@@ -96,7 +99,7 @@ namespace Resource {
 }
 
 interface ResoruceTaskContext<R> {
-	promisesCache: Map<string, Promise<R>>;
+	promisesCache: Map<string, Promise<Resource<R>>>;
 }
 
 interface ResourceDefinition<TData, TInputs> {
@@ -105,7 +108,7 @@ interface ResourceDefinition<TData, TInputs> {
 }
 
 type TGlobalState = {
-	cache: Dict<Resource<unknown>>;
+	cache: Dict<Resource<any>>;
 };
 
 const messageAtResource = (key: string, taskId: string) => ({
@@ -138,6 +141,7 @@ function requireResource<T, R>(
 	context: ResoruceTaskContext<R>,
 ): TaskFn<TGlobalState> {
 	const key = sortStringify(inputs);
+	const selectOwnState = (state: TGlobalState): Resource<R> => state.cache[key];
 
 	return async function runnerWithCache(taskApi: TaskApi<TGlobalState>) {
 		const runnningTaskPromise = context.promisesCache.get(key);
@@ -152,13 +156,15 @@ function requireResource<T, R>(
 		}
 	};
 
-	async function runnerTask(globalTaskApi: TaskApi<TGlobalState>): Promise<R> {
-		const task = TaskApi.scoped(globalTaskApi, (s) => s.cache[key]!);
+	async function runnerTask(
+		globalTaskApi: TaskApi<TGlobalState>,
+	): Promise<Resource<R>> {
+		const task = TaskApi.scoped(globalTaskApi, selectOwnState);
 		const state = task.getState();
 		switch (state.status) {
 			case ResourceStatus.Receiving:
-				return state.data;
-			case ResourceStatus.Done:
+				return state;
+			case ResourceStatus.Closed:
 			case ResourceStatus.Failed:
 			case ResourceStatus.Initial:
 				{
@@ -174,13 +180,7 @@ function requireResource<T, R>(
 			// fallthrough
 			case ResourceStatus.Pending: {
 				const settledState = await condition(task, Resource.isSettled);
-				switch (settledState.status) {
-					case ResourceStatus.Failed:
-						throw state.error;
-					case ResourceStatus.Receiving:
-					case ResourceStatus.Done:
-						return state.data;
-				}
+				return settledState;
 			}
 		}
 	}
