@@ -1,7 +1,7 @@
 import { describe, expect, test, mock } from "bun:test";
-import { buildReducer } from "./State";
-import { defineActionKind, withPayload } from "./Action";
-import { doNothing as noop } from "./utils";
+import { buildReducer } from "../State";
+import { defineActionKind, withPayload } from "../Action";
+import { doNothing as noop } from "../utils";
 import {
 	Expect,
 	IsAny,
@@ -10,7 +10,7 @@ import {
 	TrueCases,
 	Equal,
 } from "type-testing";
-import { Action } from "./reduxTypes";
+import { Action } from "../reduxTypes";
 
 const act = defineActionKind("", {
 	p_any: withPayload<any>,

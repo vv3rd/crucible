@@ -1,6 +1,6 @@
 import { describe, expect, test, mock } from "bun:test";
-import { defineActionKind, withPayload, noPayload } from "./Action";
-import { Action } from "./reduxTypes";
+import { defineActionKind, withPayload, noPayload } from "../Action";
+import { Action } from "../reduxTypes";
 import { Equal, Expect, IsUnion, NotEqual, TrueCases } from "type-testing";
 
 describe("defineActionKind", () => {

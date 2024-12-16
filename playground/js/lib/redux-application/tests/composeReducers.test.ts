@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { composeReducers } from "./composeReducers";
-import { doNothing as noop } from "./utils";
+import { composeReducers } from "../composeReducers";
+import { doNothing as noop } from "../utils";
 
 const InitAction = { type: "Init" + Math.random() };
 
