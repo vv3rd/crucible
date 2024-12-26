@@ -1,4 +1,4 @@
-import { defineActionKind } from "./defineActions";
+import { defineActionKind } from "./Action";
 import { TaskApi, TaskFn, Dict } from "./reduxTypes";
 import { nanoid } from "nanoid";
 import { sortStringify } from "./utils";
@@ -39,26 +39,28 @@ interface ResourceMeta {
 	errorUpdatedAt: number;
 }
 
-interface ResourceLike<R> extends ResourceMeta {
+interface ResourceLike<R> {
 	taskStatus: TaskStatus;
 	status: ResourceStatus;
 	data: DataForStatus<this["status"], R>;
 	error: ErrorForStatus<this["status"], R>;
 }
 
-interface InitialResource<R> extends ResourceLike<R> {
+interface SomeResource<R> extends ResourceLike<R>, ResourceMeta {}
+
+interface InitialResource<R> extends SomeResource<R> {
 	status: ResourceStatus.Initial;
 }
-interface PendingResource<R> extends ResourceLike<R> {
+interface PendingResource<R> extends SomeResource<R> {
 	status: ResourceStatus.Pending;
 }
-interface ClosedResource<R> extends ResourceLike<R> {
+interface ClosedResource<R> extends SomeResource<R> {
 	status: ResourceStatus.Closed;
 }
-interface ReceivingResource<R> extends ResourceLike<R> {
+interface ReceivingResource<R> extends SomeResource<R> {
 	status: ResourceStatus.Receiving;
 }
-interface FailedResource<R> extends ResourceLike<R> {
+interface FailedResource<R> extends SomeResource<R> {
 	status: ResourceStatus.Failed;
 }
 
@@ -73,7 +75,10 @@ namespace Resource {
 	type PredicatedBy<Fn> = Fn extends (arg: any) => arg is infer T ? T : never;
 	export const isResolved = <R>(
 		resource: Resource<R>,
-	): resource is ReceivingResource<R> | ClosedResource<R> => {
+	): resource is Extract<
+		Resource<R>,
+		{ status: ResourceStatus.Receiving | ResourceStatus.Closed }
+	> => {
 		return (
 			resource.status === ResourceStatus.Receiving ||
 			resource.status === ResourceStatus.Closed
@@ -82,10 +87,10 @@ namespace Resource {
 
 	export const isSettled = <R>(
 		resource: Resource<R>,
-	): resource is
-		| ReceivingResource<R>
-		| FailedResource<R>
-		| ClosedResource<R> => {
+	): resource is Exclude<
+		Resource<R>,
+		{ status: ResourceStatus.Initial | ResourceStatus.Pending }
+	> => {
 		return (
 			resource.status !== ResourceStatus.Initial &&
 			resource.status !== ResourceStatus.Pending
@@ -102,9 +107,14 @@ interface ResoruceTaskContext<R> {
 	promisesCache: Map<string, Promise<Resource<R>>>;
 }
 
-interface ResourceDefinition<TData, TInputs> {
+interface ResourceSetup<TData, TInputs> {
 	name: string;
-	keyedBy: (attributes: { name: string; inputs: TInputs }) => string;
+	stringify?: (attributes: { name: string; inputs: TInputs }) => string;
+	update?: (current: TData, incomming: TData, inputs: TInputs) => TData;
+}
+
+function newResource<TData, TInputs>(setup: ResourceSetup<TData, TInputs>) {
+	return function resourceReducer() {};
 }
 
 type TGlobalState = {
@@ -141,22 +151,23 @@ function requireResource<T, R>(
 	context: ResoruceTaskContext<R>,
 ): TaskFn<TGlobalState> {
 	const key = sortStringify(inputs);
-	const selectOwnState = (state: TGlobalState): Resource<R> => state.cache[key]!;
+	const selectOwnState = (state: TGlobalState): Resource<R> =>
+		state.cache[key]!;
 
-	return async function runnerWithCache(taskApi: TaskApi<TGlobalState>) {
+	return function taskWithCachedPromise(taskApi: TaskApi<TGlobalState>) {
 		const runnningTaskPromise = context.promisesCache.get(key);
 		if (runnningTaskPromise) {
 			return runnningTaskPromise;
 		} else {
-			const promise = runnerTask(taskApi);
-			context.promisesCache.set(key, promise);
-			return promise.finally(() => {
+			const promise = awaitResource(taskApi).finally(() => {
 				context.promisesCache.delete(key);
 			});
+			context.promisesCache.set(key, promise);
+			return promise;
 		}
 	};
 
-	async function runnerTask(
+	async function awaitResource(
 		globalTaskApi: TaskApi<TGlobalState>,
 	): Promise<Resource<R>> {
 		const task = TaskApi.scoped(globalTaskApi, selectOwnState);
