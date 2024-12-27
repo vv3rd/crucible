@@ -1,4 +1,4 @@
-import { Reducer, SetTask, SomeAction } from "./reduxTypes";
+import { Reducer, SetTask, SomeMessage, TaskApi } from "./types";
 
 const { entries } = Object;
 
@@ -6,7 +6,7 @@ function composeReducersImpl(
 	reducersObject: Record<string, Reducer<any, any>>,
 ) {
 	type TState = any;
-	type TAction = any;
+	type TMsg = any;
 
 	const reducers = entries(reducersObject);
 
@@ -17,8 +17,8 @@ function composeReducersImpl(
 
 	return function composedReducer(
 		current: TState | undefined,
-		action: TAction,
-		schedule: SetTask<TState>,
+		action: TMsg,
+		schedule: SetTask<TState, TMsg>,
 	): TState {
 		let next: TState = current;
 		for (let [key, reducer] of reducers) {
@@ -37,21 +37,18 @@ function composeReducersImpl(
 
 	function scopeSchedulerUnder(
 		key: string,
-		schedule: SetTask<TState>,
-	): SetTask<TState> {
+		schedule: SetTask<TState, TMsg>,
+	): SetTask<TState, TMsg> {
 		return (taksFn) => {
-			schedule(({ getState, ...taskApi }) => {
-				const scopedApi = {
-					...taskApi,
-					getState: () => getState()[key],
-				};
-				return taksFn(scopedApi);
+			schedule((_taskApi) => {
+				const scopedTaskApi = TaskApi.scoped(_taskApi, (state) => state[key]);
+				return taksFn(scopedTaskApi);
 			});
 		};
 	}
 }
 
-type ActionFromReducer<R> = R extends Reducer<any, infer A> ? A : never;
+type MessageFromReducer<R> = R extends Reducer<any, infer A> ? A : never;
 
 type StateFromReducersRecord<M> = M[keyof M] extends Reducer<any, any>
 	? { [P in keyof M]: M[P] extends Reducer<infer S, any> ? S : never }
@@ -60,7 +57,7 @@ type StateFromReducersRecord<M> = M[keyof M] extends Reducer<any, any>
 type ReducerFromCombination<M> = M[keyof M] extends Reducer<any, any>
 	? Reducer<
 			StateFromReducersRecord<M>,
-			ActionFromReducer<M[keyof M]> | SomeAction
+			MessageFromReducer<M[keyof M]> | SomeMessage
 		>
 	: never;
 

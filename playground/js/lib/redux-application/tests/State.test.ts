@@ -1,6 +1,6 @@
 import { describe, expect, test, mock } from "bun:test";
 import { buildReducer } from "../State";
-import { defineActionKind, withPayload } from "../Action";
+import { defineMessageKind, withPayload } from "../Message";
 import { doNothing as noop } from "../utils";
 import {
 	Expect,
@@ -10,9 +10,9 @@ import {
 	TrueCases,
 	Equal,
 } from "type-testing";
-import { Action } from "../reduxTypes";
+import { Message } from "../types";
 
-const act = defineActionKind("", {
+const act = defineMessageKind("", {
 	p_any: withPayload<any>,
 	p_object: withPayload<object>,
 	p_array: withPayload<unknown[]>,
@@ -28,16 +28,16 @@ const getInitialState = () => ({
 	test: 123,
 });
 
-const InitAction = { type: "init" + Math.random() };
+const InitMessage = { type: "init" + Math.random() };
 
 describe("defineState", () => {
 	test("no cases", () => {
 		const { reducer, actions } = buildReducer(getInitialState);
 		expect(actions).toStrictEqual({});
 
-		const state = reducer(undefined, InitAction, noop);
+		const state = reducer(undefined, InitMessage, noop);
 		expect(state).toEqual(getInitialState());
-		const nextState = reducer(state, InitAction, noop);
+		const nextState = reducer(state, InitMessage, noop);
 		expect(nextState).toBe(state);
 	});
 
@@ -57,7 +57,7 @@ describe("defineState", () => {
 			type _t2 = TrueCases<
 				[
 					Equal<ReturnType<typeof getInitialState>, typeof state>,
-					Equal<Action<"trigger">, typeof action>,
+					Equal<Message<"trigger">, typeof action>,
 				]
 			>;
 
@@ -70,7 +70,7 @@ describe("defineState", () => {
 		});
 		const { reducer, actions } = build;
 
-		const initialState = reducer(undefined, InitAction, noop);
+		const initialState = reducer(undefined, InitMessage, noop);
 		expect(spy).not.toBeCalled();
 		let nextState = reducer(initialState, actions.trigger(), noop);
 		expect(nextState).not.toEqual(initialState);
@@ -78,7 +78,7 @@ describe("defineState", () => {
 		expect(spy).toBeCalled();
 
 		// TODO:  rething and test repeating cases
-		// const { reducer: newReducer, actions: newActions } = build(
+		// const { reducer: newReducer, actions: newMessages } = build(
 		// 	"trigger",
 		// 	(input: number) => ({ payload: input }),
 		// )((state) => {});

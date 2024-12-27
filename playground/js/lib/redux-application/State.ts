@@ -1,15 +1,15 @@
 import {
 	Reducer,
 	SetTask,
-	AnyActionPartMaker,
-	AnyActionMaker,
-	Action,
-	SomeAction,
+	AnyMessagePartMaker,
+	AnyMessageMaker,
+	Message,
+	SomeMessage,
 	Matchable,
 	InferMatch,
-	MadeAction,
-	CompleteActionMaker,
-} from "./reduxTypes";
+	MadeMessage,
+	CompleteMessageMaker,
+} from "./types";
 
 interface DefinitionResult<TState, B extends Build> {
 	reducer: Reducer<TState, B["action"]> & {
@@ -17,25 +17,25 @@ interface DefinitionResult<TState, B extends Build> {
 	};
 
 	actions: {
-		[K in keyof B["makers"]]: CompleteActionMaker<K, B["makers"][K]>;
+		[K in keyof B["makers"]]: CompleteMessageMaker<K, B["makers"][K]>;
 	};
 }
 
-type CaseReducer<TState, TAction> = (
+type CaseReducer<TState, TMsg extends Message> = (
 	state: TState,
-	action: TAction,
-	schedule: SetTask<TState>,
+	action: TMsg,
+	schedule: SetTask<TState, TMsg>,
 ) => TState | void;
 
 type AnyCaseReducer = CaseReducer<any, any>;
 
 interface AddCase<TState, B extends Build> extends DefinitionResult<TState, B> {
-	<TType extends string, TMaker extends AnyActionPartMaker>(
+	<TType extends string, TMaker extends AnyMessagePartMaker>(
 		actionType: TType,
 		actionPartMaker: TMaker,
 	): AddCaseReducer<
 		TState,
-		MadeAction<TType, TMaker>,
+		MadeMessage<TType, TMaker>,
 		Build<B["action"], B["makers"] & { [key in TType]: TMaker }>
 	>;
 
@@ -43,7 +43,7 @@ interface AddCase<TState, B extends Build> extends DefinitionResult<TState, B> {
 		actionType: N,
 	): AddCaseReducer<
 		TState,
-		Action<N>,
+		Message<N>,
 		Build<B["action"], B["makers"] & { [key in N]: () => void }>
 	>;
 
@@ -52,14 +52,17 @@ interface AddCase<TState, B extends Build> extends DefinitionResult<TState, B> {
 	): AddCaseReducer<TState, InferMatch<Ms[number]>, B>;
 }
 
-interface AddCaseReducer<TState, TAction, B extends Build> {
+interface AddCaseReducer<TState, TMsg extends Message, B extends Build> {
 	(
-		reducer: CaseReducer<TState, TAction>,
-	): AddCase<TState, Build<B["action"] | TAction, B["makers"]>>;
+		reducer: CaseReducer<TState, TMsg>,
+	): AddCase<TState, Build<B["action"] | TMsg, B["makers"]>>;
 }
 
-interface Build<A = unknown, C = Record<string, AnyActionPartMaker>> {
-	action: A;
+interface Build<
+	M extends Message = Message,
+	C = Record<string, AnyMessagePartMaker>,
+> {
+	action: M;
 	makers: C;
 }
 
@@ -72,8 +75,8 @@ export function buildReducer<T>(getInitialState: () => T) {
 	function createReducer(cases: Case[]) {
 		function finalReducer(
 			state: T | undefined = getInitialState(),
-			action: Action,
-			schedule: SetTask<T>,
+			action: Message,
+			schedule: SetTask<T, Message>,
 		) {
 			for (const c of cases) {
 				for (const d of c.matchers) {
@@ -94,7 +97,7 @@ export function buildReducer<T>(getInitialState: () => T) {
 	function createAddReducer(
 		matchers: Matchable<any>[],
 		cases: Case[],
-		actions: Record<string, AnyActionMaker>,
+		actions: Record<string, AnyMessageMaker>,
 	) {
 		//
 		function addReducer(reduce: AnyCaseReducer) {
@@ -107,16 +110,16 @@ export function buildReducer<T>(getInitialState: () => T) {
 
 	function createAddCase(
 		cases: Case[],
-		actions: Record<string, AnyActionMaker>,
+		actions: Record<string, AnyMessageMaker>,
 	) {
 		//
 		function addCase(
-			firstArg: string | AnyActionMaker,
-			secondArg: AnyActionMaker,
-			...restArgs: AnyActionMaker[]
+			firstArg: string | AnyMessageMaker,
+			secondArg: AnyMessageMaker,
+			...restArgs: AnyMessageMaker[]
 		) {
 			if (typeof firstArg === "string") {
-				let newMaker: AnyActionMaker;
+				let newMaker: AnyMessageMaker;
 				if (secondArg) {
 					// @ts-ignore
 					newMaker = (...args: any[]) => ({
@@ -158,9 +161,9 @@ export function buildReducer<T>(getInitialState: () => T) {
 
 	const addCase = createAddCase([], {});
 
-	return addCase as AddCase<T, Build<SomeAction, {}>>;
+	return addCase as AddCase<T, Build<SomeMessage, {}>>;
 }
 
 export function createMatcher(type: string) {
-	return (ac: Action): ac is Action => ac.type === type;
+	return (ac: Message): ac is Message => ac.type === type;
 }

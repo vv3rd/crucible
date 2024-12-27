@@ -1,27 +1,27 @@
 import {
-	Action,
-	AnyActionMaker,
-	AnyActionPartMaker,
-	CompleteActionMaker,
+	Message,
+	AnyMessageMaker,
+	AnyMessagePartMaker,
+	CompleteMessageMaker,
 	WithPrefix,
-} from "./reduxTypes";
+} from "./types";
 
 const { assign, entries, fromEntries } = Object;
 
 export const noPayload = () => {};
 export const withPayload = <T>(payload: T) => ({ payload });
 
-export function defineAction<TType extends string>(type: TType) {
-	return <TMaker extends (...args: any[]) => Action>(
-		makeActionMaker: (
+export function defineMessage<TType extends string>(type: TType) {
+	return <TMaker extends (...args: any[]) => Message>(
+		makeMessageMaker: (
 			make: <const P>(payload: P) => { type: TType; payload: P },
 		) => TMaker,
 	) => {
-		const actionMaker = makeActionMaker((payload) => ({
+		const actionMaker = makeMessageMaker((payload) => ({
 			payload,
 			type,
 		}));
-		const matcher = (action: Action): action is ReturnType<TMaker> =>
+		const matcher = (action: Message): action is ReturnType<TMaker> =>
 			action.type === type;
 		return assign(actionMaker, {
 			type,
@@ -30,27 +30,27 @@ export function defineAction<TType extends string>(type: TType) {
 	};
 }
 
-export function defineActionKind<
+export function defineMessageKind<
 	TPrefix extends string,
-	TMakers extends { [key: string]: AnyActionPartMaker; match?: never },
+	TMakers extends { [key: string]: AnyMessagePartMaker; match?: never },
 >(prefix: TPrefix, actionPartMakers: TMakers) {
-	type ActionKindMakers = {
-		[K in keyof TMakers]: CompleteActionMaker<
+	type MessageKindMakers = {
+		[K in keyof TMakers]: CompleteMessageMaker<
 			WithPrefix<TPrefix, K>,
 			TMakers[K]
 		>;
 	};
-	type ActionKind = ReturnType<ActionKindMakers[keyof ActionKindMakers]>;
+	type MessageKind = ReturnType<MessageKindMakers[keyof MessageKindMakers]>;
 
 	const KIND = Symbol();
 
 	const actionMakers = fromEntries(
 		entries(actionPartMakers).map(([name, prepare]) => {
-			const match = (action: Action): action is AnyActionMaker => {
+			const match = (action: Message): action is AnyMessageMaker => {
 				return matchKind(action) && action.type === type;
 			};
 			const type = `${prefix}/${name}`;
-			const actionMaker: AnyActionMaker = assign(
+			const actionMaker: AnyMessageMaker = assign(
 				(...args: any[]) => ({
 					...prepare(...args),
 					type: type,
@@ -61,10 +61,10 @@ export function defineActionKind<
 			return [name, actionMaker];
 		}),
 	) satisfies {
-		[key: string]: AnyActionMaker;
-	} as ActionKindMakers;
+		[key: string]: AnyMessageMaker;
+	} as MessageKindMakers;
 
-	const matchKind = (action: Action): action is ActionKind => {
+	const matchKind = (action: Message): action is MessageKind => {
 		return "kind" in action && action.kind === KIND;
 	};
 

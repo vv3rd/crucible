@@ -1,5 +1,5 @@
-import { defineActionKind } from "./Action";
-import { TaskApi, TaskFn, Dict } from "./reduxTypes";
+import { defineMessageKind } from "./Message";
+import { TaskApi, TaskFn, Dict } from "./types";
 import { nanoid } from "nanoid";
 import { sortStringify } from "./utils";
 
@@ -135,7 +135,7 @@ const dataAtResource = <T>(key: string, data: T) => ({
 	},
 });
 
-const resourceAct = defineActionKind("cache", {
+const resourceAct = defineMessageKind("cache", {
 	triggered: messageAtResource,
 	resolved: dataAtResource<{ output: unknown }>,
 	rejected: dataAtResource<{ error: unknown }>,
@@ -211,7 +211,7 @@ async function condition<T>(
 ): Promise<T> {
 	let state = taskApi.getState();
 	while (!checker(state)) {
-		await taskApi.nextAction();
+		await taskApi.nextMessage();
 		state = taskApi.getState();
 	}
 	return state;
