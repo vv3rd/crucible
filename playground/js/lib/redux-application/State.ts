@@ -1,6 +1,5 @@
 import {
 	Reducer,
-	TaskScheduler,
 	AnyMessagePartMaker,
 	AnyMessageMaker,
 	Message,
@@ -10,6 +9,7 @@ import {
 	MadeMessage,
 	CompleteMessageMaker,
 } from "./types";
+import { TaskScheduler } from "./Task";
 
 interface DefinitionResult<TState, B extends Build> {
 	reducer: Reducer<TState, B["action"]> & {

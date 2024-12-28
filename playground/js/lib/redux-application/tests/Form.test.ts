@@ -1,5 +1,5 @@
 import { describe, test } from "bun:test";
-import { createFieldReducer, createFormReducer } from "./Form";
+import { createFieldReducer, createFormReducer } from "../Form";
 
 const field =
 	<T>(defaultValue: T) =>

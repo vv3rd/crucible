@@ -1,27 +1,21 @@
 import { nanoid } from "nanoid";
-import {
-	Message,
-	Reducer,
-	TaskFn,
-	TaskApi,
-	Store,
-	ListenerCallback,
-} from "./types";
-import { identity } from "rxjs";
+import { Message, Reducer, Store, ListenerCallback } from "./types";
+import { TaskFn, TaskApi } from "./Task";
+import { identity } from "../toolkit";
 
 type WrappableStoreCreator<
 	TState,
 	TMsg extends Message,
 > = typeof createStoreIml<TState, TMsg>;
 
-type StoreWrapper<TState, TMsg extends Message> = (
+type StoreOverlay<TState, TMsg extends Message> = (
 	creator: WrappableStoreCreator<TState, TMsg>,
 ) => WrappableStoreCreator<TState, TMsg>;
 
 export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	effects: Effects<TState, TMsg> = {},
-	wrapper: StoreWrapper<TState, TMsg> = identity,
+	overlay: StoreOverlay<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
 	let final = (): typeof store => {
 		try {
@@ -30,7 +24,7 @@ export function createStore<TState, TMsg extends Message>(
 			throw new Error(ERR_FINAL_USED_BEFORE_CREATED, { cause: error });
 		}
 	};
-	const store: Store<TState, TMsg> = wrapper(createStoreIml)(
+	const store: Store<TState, TMsg> = overlay(createStoreIml)(
 		reducer,
 		effects,
 		() => final(),
@@ -96,8 +90,8 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	// biome-ignore format: looks funky
 	return {
-		dispatch:  (action: any) => storeDelegate.dispatch(action),
-		getState:  (           ) => storeDelegate.getState(),
+		dispatch:  (action: any) => storeDelegate.dispatch (action  ),
+		getState:  (           ) => storeDelegate.getState (        ),
 		subscribe: (callback   ) => storeDelegate.subscribe(callback),
 	};
 }

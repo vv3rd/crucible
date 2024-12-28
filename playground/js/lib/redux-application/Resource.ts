@@ -1,5 +1,6 @@
 import { defineMessageKind } from "./Message";
-import { TaskApi, TaskFn, Dict } from "./types";
+import { Dict } from "./types";
+import { TaskApi, TaskFn } from "./Task";
 import { nanoid } from "nanoid";
 import { sortStringify } from "./utils";
 
