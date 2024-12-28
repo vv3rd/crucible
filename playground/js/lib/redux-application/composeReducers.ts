@@ -1,4 +1,4 @@
-import { Reducer, SetTask, SomeMessage, TaskApi } from "./types";
+import { Reducer, TaskScheduler, SomeMessage, TaskApi } from "./types";
 
 const { entries } = Object;
 
@@ -18,7 +18,7 @@ function composeReducersImpl(
 	return function composedReducer(
 		current: TState | undefined,
 		action: TMsg,
-		schedule: SetTask<TState, TMsg>,
+		schedule: TaskScheduler<TState, TMsg>,
 	): TState {
 		let next: TState = current;
 		for (let [key, reducer] of reducers) {
@@ -37,8 +37,8 @@ function composeReducersImpl(
 
 	function scopeSchedulerUnder(
 		key: string,
-		schedule: SetTask<TState, TMsg>,
-	): SetTask<TState, TMsg> {
+		schedule: TaskScheduler<TState, TMsg>,
+	): TaskScheduler<TState, TMsg> {
 		return (taksFn) => {
 			schedule((_taskApi) => {
 				const scopedTaskApi = TaskApi.scoped(_taskApi, (state) => state[key]);

@@ -1,6 +1,6 @@
 import {
 	Reducer,
-	SetTask,
+	TaskScheduler,
 	AnyMessagePartMaker,
 	AnyMessageMaker,
 	Message,
@@ -24,7 +24,7 @@ interface DefinitionResult<TState, B extends Build> {
 type CaseReducer<TState, TMsg extends Message> = (
 	state: TState,
 	action: TMsg,
-	schedule: SetTask<TState, TMsg>,
+	schedule: TaskScheduler<TState, TMsg>,
 ) => TState | void;
 
 type AnyCaseReducer = CaseReducer<any, any>;
@@ -76,7 +76,7 @@ export function buildReducer<T>(getInitialState: () => T) {
 		function finalReducer(
 			state: T | undefined = getInitialState(),
 			action: Message,
-			schedule: SetTask<T, Message>,
+			schedule: TaskScheduler<T, Message>,
 		) {
 			for (const c of cases) {
 				for (const d of c.matchers) {

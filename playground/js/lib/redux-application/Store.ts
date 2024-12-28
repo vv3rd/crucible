@@ -8,7 +8,6 @@ import {
 	ListenerCallback,
 } from "./types";
 import { identity } from "rxjs";
-import { match } from "../toolkit";
 
 type WrappableStoreCreator<
 	TState,
@@ -24,17 +23,19 @@ export function createStore<TState, TMsg extends Message>(
 	effects: Effects<TState, TMsg> = {},
 	wrapper: StoreWrapper<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
-	// biome-ignore format: looks awful overwise
-	const final = () => ({
-		get dispatch() { return store.dispatch; },
-		get getState() { return store.getState; },
-		get subscribe() { return store.subscribe; },
-	});
+	let final = (): typeof store => {
+		try {
+			return store;
+		} catch (error) {
+			throw new Error(ERR_FINAL_USED_BEFORE_CREATED, { cause: error });
+		}
+	};
 	const store: Store<TState, TMsg> = wrapper(createStoreIml)(
 		reducer,
 		effects,
-		final,
+		() => final(),
 	);
+	final = () => store;
 	return store;
 }
 
@@ -48,53 +49,40 @@ export function createStoreIml<TState, TMsg extends Message>(
 		notifyListeners = defaultNotifyListeners(),
 	} = effects;
 
-	type TVoidTaskFn = TaskFn<TState, TMsg, void>;
-	type TDispatchArg = TMsg | TaskFn<TState, TMsg, any>;
-	type TListenerCallback = ListenerCallback<TMsg>;
-	type TStore = Store<TState, TMsg>;
+	const listeners: Set<ListenerCallback<TMsg>> = new Set();
 
-	const listeners: Set<TListenerCallback> = new Set();
+	const init: any = { type: "INIT-" + nanoid() };
+	let state: TState = reducer(undefined, init, () => {});
 
-	const init = { type: "INIT-" + nanoid() } as any;
-	let state = reducer(undefined, init, () => {});
-
-	let currentStore: TStore;
-	const activeStore: TStore = (currentStore = {
-		dispatch(msgOrTask: TDispatchArg) {
+	let storeDelegate: Store<TState, TMsg>;
+	const realStore: Store<TState, TMsg> = (storeDelegate = {
+		dispatch(msgOrTask: TMsg | TaskFn<TState, TMsg, any>) {
 			const taskApi = TaskApi.fromStore(final());
 			if (msgOrTask instanceof Function) {
 				const task = msgOrTask;
 				return task(taskApi);
 			}
 			const message = msgOrTask;
-			const tasks: TVoidTaskFn[] = [];
-			let nextState = state;
+			const tasks: TaskFn<TState, TMsg, void>[] = [];
 			try {
-				currentStore = lockedStore;
-				nextState = reducer(state, message, (taskFn) => tasks.push(taskFn));
+				storeDelegate = lockedStore;
+				state = reducer(state, message, (taskFn) => tasks.push(taskFn));
 			} finally {
-				currentStore = activeStore;
-			}
-			const isUnchanged = nextState === state;
-			{
-				state = nextState;
+				storeDelegate = realStore;
 			}
 			executeTasks(tasks, taskApi);
-			if (isUnchanged) {
-				return;
-			}
 			notifyListeners([...listeners], message);
 		},
 
-		subscribe(listener: TListenerCallback) {
+		subscribe(listener: ListenerCallback<TMsg>) {
 			let isSubscribed = true;
 			listeners.add(listener);
 			return function unsubscribe() {
+				if (storeDelegate === lockedStore) {
+					throw new Error(ERR_LOCKED_UNSUBSCRIBE);
+				}
 				if (!isSubscribed) {
 					return;
-				}
-				if (currentStore === lockedStore) {
-					throw new Error(ERR_LOCKED_UNSUBSCRIBE);
 				}
 				isSubscribed = false;
 				listeners.delete(listener);
@@ -108,9 +96,9 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	// biome-ignore format: looks funky
 	return {
-		dispatch:  (action: any) => currentStore.dispatch(action),
-		getState:  (           ) => currentStore.getState(),
-		subscribe: (callback   ) => currentStore.subscribe(callback),
+		dispatch:  (action: any) => storeDelegate.dispatch(action),
+		getState:  (           ) => storeDelegate.getState(),
+		subscribe: (callback   ) => storeDelegate.subscribe(callback),
 	};
 }
 
@@ -206,5 +194,10 @@ const ERR_LOCKED_SUBSCRIBE = (() => {
 
 const ERR_LOCKED_UNSUBSCRIBE = (() => {
 	let message = "Store is locked on dispatch";
+	return message;
+})();
+
+const ERR_FINAL_USED_BEFORE_CREATED = (() => {
+	let message = "Can't use final store before it is created";
 	return message;
 })();

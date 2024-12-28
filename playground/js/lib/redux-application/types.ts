@@ -18,7 +18,7 @@ export interface MessageFactory<
 	type: A["type"];
 }
 
-export interface SetTask<TState, TMsg extends Message> {
+export interface TaskScheduler<TState, TMsg extends Message> {
 	(task: TaskFn<TState, TMsg, void>): void;
 }
 
@@ -96,7 +96,7 @@ export interface Reducer<TState, TMsg extends Message> {
 	(
 		state: TState | undefined,
 		action: TMsg,
-		schedule: SetTask<TState, TMsg>,
+		schedule: TaskScheduler<TState, TMsg>,
 	): TState;
 }
 
