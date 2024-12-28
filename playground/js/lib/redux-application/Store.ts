@@ -7,38 +7,67 @@ import {
 	Store,
 	ListenerCallback,
 } from "./types";
+import { identity } from "rxjs";
+import { match } from "../toolkit";
 
-const Builtin = {
-	InitMessage: () => ({ type: "INIT-" + nanoid() }),
-};
+type WrappableStoreCreator<
+	TState,
+	TMsg extends Message,
+> = typeof createStoreIml<TState, TMsg>;
+
+type StoreWrapper<TState, TMsg extends Message> = (
+	creator: WrappableStoreCreator<TState, TMsg>,
+) => WrappableStoreCreator<TState, TMsg>;
 
 export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	effects: Effects<TState, TMsg> = {},
+	wrapper: StoreWrapper<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
-	type TTaskFn = TaskFn<TState, TMsg, void>;
-	type TListenerCallback = ListenerCallback<TMsg>;
+	// biome-ignore format: looks awful overwise
+	const final = () => ({
+		get dispatch() { return store.dispatch; },
+		get getState() { return store.getState; },
+		get subscribe() { return store.subscribe; },
+	});
+	const store: Store<TState, TMsg> = wrapper(createStoreIml)(
+		reducer,
+		effects,
+		final,
+	);
+	return store;
+}
 
+export function createStoreIml<TState, TMsg extends Message>(
+	reducer: Reducer<TState, TMsg>,
+	effects: Effects<TState, TMsg> = {},
+	final: () => Store<TState, TMsg>,
+): Store<TState, TMsg> {
 	const {
 		executeTasks = defaultExecuteTasks(),
 		notifyListeners = defaultNotifyListeners(),
 	} = effects;
 
-	const initialTasks: TTaskFn[] = [];
-	let state: TState = reducer(undefined, Builtin.InitMessage() as any, (task) =>
-		initialTasks.push(task),
-	);
+	type TVoidTaskFn = TaskFn<TState, TMsg, void>;
+	type TDispatchArg = TMsg | TaskFn<TState, TMsg, any>;
+	type TListenerCallback = ListenerCallback<TMsg>;
+	type TStore = Store<TState, TMsg>;
 
-	let listeners: Set<TListenerCallback> = new Set();
+	const listeners: Set<TListenerCallback> = new Set();
 
-	const activeStore: Store<TState, TMsg> = {
-		dispatch(msgOrTask: TMsg | TaskFn<TState, TMsg, any>) {
+	const init = { type: "INIT-" + nanoid() } as any;
+	let state = reducer(undefined, init, () => {});
+
+	let currentStore: TStore;
+	const activeStore: TStore = (currentStore = {
+		dispatch(msgOrTask: TDispatchArg) {
+			const taskApi = TaskApi.fromStore(final());
 			if (msgOrTask instanceof Function) {
 				const task = msgOrTask;
 				return task(taskApi);
 			}
 			const message = msgOrTask;
-			const tasks: TTaskFn[] = [];
+			const tasks: TVoidTaskFn[] = [];
 			let nextState = state;
 			try {
 				currentStore = lockedStore;
@@ -57,7 +86,7 @@ export function createStore<TState, TMsg extends Message>(
 			notifyListeners([...listeners], message);
 		},
 
-		subscribe(listener: ListenerCallback<TMsg>) {
+		subscribe(listener: TListenerCallback) {
 			let isSubscribed = true;
 			listeners.add(listener);
 			return function unsubscribe() {
@@ -75,33 +104,27 @@ export function createStore<TState, TMsg extends Message>(
 		getState() {
 			return state;
 		},
+	});
+
+	// biome-ignore format: looks funky
+	return {
+		dispatch:  (action: any) => currentStore.dispatch(action),
+		getState:  (           ) => currentStore.getState(),
+		subscribe: (callback   ) => currentStore.subscribe(callback),
 	};
-
-	const lockedStore: Store<TState, TMsg> = {
-		dispatch() {
-			throw new Error(ERR_LOCKED_DISPATCH);
-		},
-		subscribe() {
-			throw new Error(ERR_LOCKED_SUBSCRIBE);
-		},
-		getState() {
-			throw new Error(ERR_LOCKED_GETSTATE);
-		},
-	};
-
-	let currentStore = activeStore;
-
-	const store: Store<TState, TMsg> = {
-		dispatch: (action: TMsg | TTaskFn) => currentStore.dispatch(action),
-		getState: () => currentStore.getState(),
-		subscribe: (callback) => currentStore.subscribe(callback),
-	};
-
-	const taskApi = TaskApi.fromStore(store);
-	executeTasks(initialTasks, taskApi);
-
-	return store;
 }
+
+const lockedStore: Store<any, any> = {
+	dispatch() {
+		throw new Error(ERR_LOCKED_DISPATCH);
+	},
+	subscribe() {
+		throw new Error(ERR_LOCKED_SUBSCRIBE);
+	},
+	getState() {
+		throw new Error(ERR_LOCKED_GETSTATE);
+	},
+};
 
 interface Effects<TState, TMsg extends Message> {
 	notifyListeners?: NotifyListeners<TMsg>;
