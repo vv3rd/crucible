@@ -20,7 +20,8 @@ export interface MessageFactory<
 	type: A["type"];
 }
 
-export interface Unsubscribe {
+export interface Subscription extends Disposable {
+	unsubscribe(): void;
 	(): void;
 }
 
@@ -31,7 +32,7 @@ export interface ListenerCallback<TMsg extends Message> {
 export interface Store<TState, TMsg extends Message> {
 	dispatch: Dispatch<TMsg, TState>;
 	getState(): TState;
-	subscribe(listener: ListenerCallback<TMsg>): Unsubscribe;
+	subscribe(listener: ListenerCallback<TMsg>): Subscription;
 }
 
 export interface Dispatch<TMsg extends Message, TState> {

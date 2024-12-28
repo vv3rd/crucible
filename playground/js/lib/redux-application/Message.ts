@@ -1,3 +1,4 @@
+import { ObjectUnsubscribedError } from "rxjs";
 import {
 	Message,
 	AnyMessageMaker,
@@ -70,3 +71,45 @@ export function defineMessageKind<
 
 	return { ...actionMakers, match: matchKind };
 }
+
+abstract class MessageBase {
+	get type() {
+		const constructorTypes: string[] = [];
+		let proto = Object.getPrototypeOf(this);
+		while (proto !== MessageBase.prototype) {
+			constructorTypes.push(proto.constructor.type);
+			proto = Object.getPrototypeOf(proto);
+		}
+		return constructorTypes.join("/");
+	}
+
+	toJSON() {
+		return { ...this, type: this.type };
+	}
+}
+
+interface MessageClass<
+	T extends string,
+	P extends object,
+	B extends MessageBase = MessageBase,
+> {
+	type: T;
+	(payload: P): Readonly<B & P>;
+	new (payload: P): Readonly<B & P>;
+}
+
+const createMessageClass =
+	<T extends string>(type: T) =>
+	<P extends object>() => {
+		const Class = function (this: MessageBase & P, payload: P) {
+			if (this instanceof Class) {
+				Object.assign(this, payload);
+				return this;
+			} else {
+				return new Class(payload);
+			}
+		} as MessageClass<T, P>;
+		Class.prototype = MessageBase.prototype;
+		Class.type = type;
+		return Class;
+	};

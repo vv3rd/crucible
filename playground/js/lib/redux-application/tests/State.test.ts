@@ -43,9 +43,9 @@ describe("defineState", () => {
 
 	test("defined actionns", () => {
 		const spy = mock();
-		const build = buildReducer(() => ({
-			...getInitialState(),
-		}))("trigger")((state, action) => {
+		const build = buildReducer(
+			getInitialState, //
+		)("trigger")((state, action) => {
 			type _t1 = FalseCases<
 				[
 					IsAny<typeof state>,

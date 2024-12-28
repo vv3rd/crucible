@@ -14,7 +14,6 @@ type StoreOverlay<TState, TMsg extends Message> = (
 
 export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
-	effects: Effects<TState, TMsg> = {},
 	overlay: StoreOverlay<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
 	let final = (): typeof store => {
@@ -23,6 +22,10 @@ export function createStore<TState, TMsg extends Message>(
 		} catch (error) {
 			throw new Error(ERR_FINAL_USED_BEFORE_CREATED, { cause: error });
 		}
+	};
+	const effects: Effects<TState, TMsg> = {
+		executeTasks: defaultExecuteTasks(),
+		notifyListeners: defaultNotifyListeners(),
 	};
 	const store: Store<TState, TMsg> = overlay(createStoreIml)(
 		reducer,
@@ -35,13 +38,10 @@ export function createStore<TState, TMsg extends Message>(
 
 export function createStoreIml<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
-	effects: Effects<TState, TMsg> = {},
+	effects: Effects<TState, TMsg>,
 	final: () => Store<TState, TMsg>,
 ): Store<TState, TMsg> {
-	const {
-		executeTasks = defaultExecuteTasks(),
-		notifyListeners = defaultNotifyListeners(),
-	} = effects;
+	const { executeTasks, notifyListeners } = effects;
 
 	const listeners: Set<ListenerCallback<TMsg>> = new Set();
 
@@ -71,7 +71,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 		subscribe(listener: ListenerCallback<TMsg>) {
 			let isSubscribed = true;
 			listeners.add(listener);
-			return function unsubscribe() {
+			function unsubscribe() {
 				if (storeDelegate === lockedStore) {
 					throw new Error(ERR_LOCKED_UNSUBSCRIBE);
 				}
@@ -80,7 +80,10 @@ export function createStoreIml<TState, TMsg extends Message>(
 				}
 				isSubscribed = false;
 				listeners.delete(listener);
-			};
+			}
+			unsubscribe.unsubscribe = unsubscribe;
+			unsubscribe[Symbol.dispose] = unsubscribe;
+			return unsubscribe;
 		},
 
 		getState() {
@@ -109,8 +112,8 @@ const lockedStore: Store<any, any> = {
 };
 
 interface Effects<TState, TMsg extends Message> {
-	notifyListeners?: NotifyListeners<TMsg>;
-	executeTasks?: ExecuteTasks<TState, TMsg>;
+	notifyListeners: NotifyListeners<TMsg>;
+	executeTasks: ExecuteTasks<TState, TMsg>;
 }
 
 const defaultErrorHandler = console.error;
@@ -122,7 +125,7 @@ type ErrorHandlingConfig = {
 type NotifyListeners<TMsg extends Message> = ReturnType<
 	typeof defaultNotifyListeners<TMsg>
 >;
-function defaultNotifyListeners<TMsg extends Message>({
+export function defaultNotifyListeners<TMsg extends Message>({
 	onError = defaultErrorHandler,
 }: ErrorHandlingConfig = {}) {
 	const notifyListeners = (
@@ -138,7 +141,7 @@ function defaultNotifyListeners<TMsg extends Message>({
 type ExecuteTasks<TState, TMsg extends Message> = ReturnType<
 	typeof defaultExecuteTasks<TState, TMsg>
 >;
-function defaultExecuteTasks<TState, TMsg extends Message>({
+export function defaultExecuteTasks<TState, TMsg extends Message>({
 	onError = defaultErrorHandler,
 }: ErrorHandlingConfig = {}) {
 	type TTaskFn = TaskFn<TState, TMsg, void>;

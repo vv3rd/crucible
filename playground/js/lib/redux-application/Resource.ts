@@ -110,8 +110,11 @@ interface ResoruceTaskContext<R> {
 
 interface ResourceSetup<TData, TInputs> {
 	name: string;
-	stringify?: (attributes: { name: string; inputs: TInputs }) => string;
-	update?: (current: TData, incomming: TData, inputs: TInputs) => TData;
+	fetch: (inputs: TInputs) => Promise<TData>,
+	hash?: (attributes: { name: string; inputs: TInputs }) => string;
+	merge?: (current: TData, incomming: TData, inputs: TInputs) => TData;
+	// lifetime?: Lifetime // { extended: Matchable, expired: Matchable }
+	// validity?: Validity
 }
 
 function newResource<TData, TInputs>(setup: ResourceSetup<TData, TInputs>) {
