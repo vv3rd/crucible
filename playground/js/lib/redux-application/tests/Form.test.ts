@@ -8,7 +8,7 @@ const field =
 
 describe("createFormReducer() capabilities", () => {
 	test("Validates on blur", () => {
-		const { reducer, actions } = createFormReducer({
+		const {actions ,  reducer} = createFormReducer({
 			init: (pass: "fizz" | "buzz" | null) => ({
 				username: field(""),
 				password: field(pass),

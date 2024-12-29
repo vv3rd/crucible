@@ -1,4 +1,3 @@
-import { nanoid } from "nanoid";
 import { Message, Reducer, Store, ListenerCallback } from "./types";
 import { TaskFn, TaskApi } from "./Task";
 import { identity } from "../toolkit";
@@ -45,7 +44,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	const listeners: Set<ListenerCallback<TMsg>> = new Set();
 
-	const init: any = { type: "INIT-" + nanoid() };
+	const init: any = { type: "INIT-" + Math.random() };
 	let state: TState = reducer(undefined, init, () => {});
 
 	let storeDelegate: Store<TState, TMsg>;
@@ -58,10 +57,16 @@ export function createStoreIml<TState, TMsg extends Message>(
 			}
 			const message = msgOrTask;
 			const tasks: TaskFn<TState, TMsg, void>[] = [];
+			const addTask = tasks.push.bind(tasks);
+			const addTaskRestructed = () => {
+				throw new Error(ERR_SCHEDULER_USED_OUTSIDE_REDUCER);
+			};
+			let scheduler = addTask;
 			try {
 				storeDelegate = lockedStore;
-				state = reducer(state, message, (taskFn) => tasks.push(taskFn));
+				state = reducer(state, message, (task) => scheduler(task));
 			} finally {
+				scheduler = addTaskRestructed;
 				storeDelegate = realStore;
 			}
 			executeTasks(tasks, taskApi);
@@ -196,5 +201,10 @@ const ERR_LOCKED_UNSUBSCRIBE = (() => {
 
 const ERR_FINAL_USED_BEFORE_CREATED = (() => {
 	let message = "Can't use final store before it is created";
+	return message;
+})();
+
+const ERR_SCHEDULER_USED_OUTSIDE_REDUCER = (() => {
+	let message = "Scheduling tasks is only allowed within reducer execution";
 	return message;
 })();

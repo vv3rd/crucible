@@ -69,7 +69,8 @@ export function defineMessageKind<
 		return "kind" in action && action.kind === KIND;
 	};
 
-	return { ...actionMakers, match: matchKind };
+    const result = { ...actionMakers, match: matchKind };
+	return result as typeof result & {T: MessageKind}
 }
 
 abstract class MessageBase {

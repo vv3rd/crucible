@@ -1,5 +1,5 @@
 import { defineMessageKind } from "./Message";
-import { Dict } from "./types";
+import { Dict, Message } from "./types";
 import { TaskApi, TaskFn } from "./Task";
 import { nanoid } from "nanoid";
 import { sortStringify } from "./utils";
@@ -18,14 +18,15 @@ enum TaskStatus {
 	Running,
 }
 
-type ResultsShape<D, E> = { data: D; error: E };
+// biome-ignore format:
 type ResourceResultsForStatus<R> = {
-	[ResourceStatus.Initial]: ResultsShape<undefined, undefined>;
-	[ResourceStatus.Pending]: ResultsShape<undefined, undefined>;
-	[ResourceStatus.Receiving]: ResultsShape<R, undefined>;
-	[ResourceStatus.Failed]: ResultsShape<R | undefined, unknown>;
-	[ResourceStatus.Closed]: ResultsShape<R, undefined>;
+	[ResourceStatus.Initial]:   { data: undefined;     error: undefined };
+	[ResourceStatus.Pending]:   { data: undefined;     error: undefined };
+	[ResourceStatus.Receiving]: { data: R;             error: undefined };
+	[ResourceStatus.Closed]:    { data: R;             error: undefined };
+	[ResourceStatus.Failed]:    { data: R | undefined; error: Error     };
 };
+
 type DataForStatus<
 	S extends ResourceStatus,
 	R,
@@ -110,15 +111,32 @@ interface ResoruceTaskContext<R> {
 
 interface ResourceSetup<TData, TInputs> {
 	name: string;
-	fetch: (inputs: TInputs) => Promise<TData>,
+	fetch: (inputs: TInputs) => Promise<TData>;
 	hash?: (attributes: { name: string; inputs: TInputs }) => string;
 	merge?: (current: TData, incomming: TData, inputs: TInputs) => TData;
 	// lifetime?: Lifetime // { extended: Matchable, expired: Matchable }
 	// validity?: Validity
 }
 
-function newResource<TData, TInputs>(setup: ResourceSetup<TData, TInputs>) {
-	return function resourceReducer() {};
+function createResource<D, I>(setup: ResourceSetup<D, I>) {
+	type DataMsg<T extends string, D> = Message<T> & D;
+	type M = typeof resourceAct.T;
+	return function resourceReducer(was: Resource<D>, msg: M) {
+		switch (was.status) {
+			case ResourceStatus.Initial:
+			case ResourceStatus.Pending:
+			case ResourceStatus.Receiving:
+			case ResourceStatus.Failed:
+			case ResourceStatus.Closed:
+		}
+	};
+
+	function reducerInitial(was: InitialResource<D>, msg: M) {
+		switch (msg.type) {
+			case resourceAct.triggered.type: {
+			}
+		}
+	}
 }
 
 type TGlobalState = {
