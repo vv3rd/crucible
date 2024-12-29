@@ -1,5 +1,4 @@
 import {
-	Reducer,
 	AnyMessagePartMaker,
 	AnyMessageMaker,
 	Message,
@@ -10,6 +9,45 @@ import {
 	CompleteMessageMaker,
 } from "./types";
 import { TaskScheduler } from "./Task";
+
+export interface Reducer<TState, TMsg extends Message> {
+	(
+		state: TState | undefined,
+		message: TMsg,
+		schedule: TaskScheduler<TState, TMsg>,
+	): TState;
+}
+
+export namespace Reducer {
+	const InitAction = { type: "INIT-" + Math.random() };
+	const ProbeAction = { type: "PROBE-" + Math.random() };
+
+	export function initialize<TState>(reducer: Reducer<TState, any>) {
+		return reducer(undefined, InitAction, () => {});
+	}
+
+	export function makeDiscoverable<TState, TMsg extends Message>(
+		reducer: Reducer<TState, TMsg>,
+	) {
+		const reducerWithProbeHandling = (
+			was: TState,
+			msg: TMsg,
+			exec: TaskScheduler<TState, TMsg>,
+		) => {
+			if (msg === ProbeAction) {
+				exec((task) => {
+					// TODO: think how and when to record property access with proxy
+					task.getState()
+					// I think getState IS THE FUNCTION I wanna assign
+					// to .select() method on reducer-object 
+				});
+				return was;
+			}
+
+			return reducer(was, msg, exec);
+		};
+	}
+}
 
 interface DefinitionResult<TState, B extends Build> {
 	reducer: Reducer<TState, B["action"]> & {

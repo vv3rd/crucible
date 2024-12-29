@@ -1,5 +1,6 @@
-import { Reducer, SomeMessage } from "./types";
+import { SomeMessage } from "./types";
 import { TaskScheduler, TaskApi } from "./Task";
+import { Reducer } from "./Reducer";
 
 const { entries } = Object;
 

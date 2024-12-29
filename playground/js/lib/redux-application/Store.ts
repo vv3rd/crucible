@@ -1,4 +1,5 @@
-import { Message, Reducer, Store, ListenerCallback } from "./types";
+import { Message, Store, ListenerCallback } from "./types";
+import { Reducer } from "./Reducer";
 import { TaskFn, TaskApi } from "./Task";
 import { identity } from "../toolkit";
 
@@ -44,8 +45,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	const listeners: Set<ListenerCallback<TMsg>> = new Set();
 
-	const init: any = { type: "INIT-" + Math.random() };
-	let state: TState = reducer(undefined, init, () => {});
+	let state: TState = Reducer.initialize(reducer);
 
 	let storeDelegate: Store<TState, TMsg>;
 	const realStore: Store<TState, TMsg> = (storeDelegate = {

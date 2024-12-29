@@ -1,5 +1,5 @@
 import { describe, expect, test, mock } from "bun:test";
-import { buildReducer } from "../State";
+import { buildReducer } from "../Reducer";
 import { defineMessageKind, withPayload } from "../Message";
 import { doNothing as noop } from "../utils";
 import {

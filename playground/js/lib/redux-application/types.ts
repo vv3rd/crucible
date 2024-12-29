@@ -1,7 +1,8 @@
-import { TaskFn, TaskScheduler } from "./Task";
+import { TaskFn } from "./Task";
 
 export interface Message<T extends string = string> {
 	type: T;
+	// [key: string]: unknown;
 }
 
 export interface SomeMessage extends Message {
@@ -41,14 +42,6 @@ export interface Dispatch<TMsg extends Message, TState> {
 	<TResult>(actionOrTask: TMsg | TaskFn<TState, TMsg, TResult>): void | TResult;
 }
 export type Dispatchable<A extends Message, S> = A | TaskFn<S, any>;
-
-export interface Reducer<TState, TMsg extends Message> {
-	(
-		state: TState | undefined,
-		action: TMsg,
-		schedule: TaskScheduler<TState, TMsg>,
-	): TState;
-}
 
 // Utils
 

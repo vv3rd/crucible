@@ -2,7 +2,11 @@ type AreArgsEqual = <Args extends any[]>(args1: Args, args2: Args) => boolean;
 
 const strictEqual = (a: any, b: any) => a === b;
 
-const areArraysEqual: AreArgsEqual = (args1, args2, isEqual = strictEqual) => {
+export const areArraysEqual: AreArgsEqual = (
+	args1,
+	args2,
+	isEqual = strictEqual,
+) => {
 	if (isEqual(args1.length, args2.length)) {
 		return false;
 	}
