@@ -1,4 +1,4 @@
-import { Message } from "./types";
+import { Message, Selectable, StateRoot } from "./types";
 import { Reducer } from "./Reducer";
 import { areArraysEqual, memoLast } from "../toolkit/memoLast";
 
@@ -14,8 +14,8 @@ export namespace Agent {
 		// deriveed agent then can be defined with a adresser function
 		const self: Agent<TValue, TMsg> = {
 			reduce: reducer,
-			select: (globalState: GlobalState<TValue>) => {
-				const container = globalState.agents[name];
+			select: (globalState) => {
+				const container = globalState["agents"][name];
 				return container ? select(container) : initial;
 			},
 		};
@@ -33,11 +33,11 @@ export namespace Agent {
 
 	export function derive<T>(
 		getValue: (getter: <V>(agent: Agent<V, any>) => V) => T,
-	) {
+	): ReadonlyAgent<T> {
 		let sources: Set<Agent<unknown, Message>>;
-		let lastResult: AgentSelectorResult<T> | undefined;
+		let lastResult: AgentOutput<T> | undefined;
 		let lastSourceValues: unknown[] = [];
-		const sourcesAreUnchanged = (globalState: GlobalState<T>) => {
+		const sourcesAreUnchanged = (globalState: StateRoot) => {
 			const currentSourceValues = [...sources].map(
 				(source) => source.select(globalState).value,
 			);
@@ -45,7 +45,7 @@ export namespace Agent {
 		};
 
 		return {
-			select(globalState: GlobalState<T>) {
+			select(globalState: StateRoot) {
 				if (lastResult && sourcesAreUnchanged(globalState)) {
 					return lastResult;
 				}
@@ -74,18 +74,18 @@ export namespace Agent {
 		const { optional = false } = properties;
 		const sources: Sources = [];
 		const select = memoLast(
-			(containerState: AgentContainer<T>): AgentSelectorResult<T> => ({
+			(containerState: AgentContainer<T>): AgentOutput<T> => ({
 				value: containerState.value,
 				sources,
 			}),
 		);
-		const fallback: AgentSelectorResult<undefined> = {
+		const fallback: AgentOutput<undefined> = {
 			value: undefined,
 			sources,
 		};
 		return {
-			select(globalState: GlobalState<T>) {
-				const container = globalState.agents[name];
+			select(globalState: StateRoot) {
+				const container = globalState["agents"][name];
 				if (container) {
 					return select(container);
 				}
@@ -97,26 +97,31 @@ export namespace Agent {
 			},
 		};
 	}
+
+	export function constant<T>(value: T): ReadonlyAgent<T> {
+		const result: AgentOutput<T> = { value, sources: [] };
+		return {
+			select: () => result,
+		};
+	}
 }
 
 type Sources = Iterable<Agent<any, any>>;
 
-type AgentSelectorResult<TState> = {
+type AgentOutput<TState> = {
 	value: TState;
 	sources: Sources;
-};
-
-type Agent<TState, TMsg extends Message> = {
-	reduce: Reducer<TState, TMsg>;
-	select: (globalState: GlobalState<any>) => AgentSelectorResult<TState>;
 };
 
 type AgentContainer<T> = {
 	value: T;
 };
 
-type GlobalState<T> = {
-	agents: {
-		[key in string]: AgentContainer<T>;
-	};
-};
+interface ReadonlyAgent<T> extends Selectable<AgentOutput<T>> {}
+
+interface Agent<TState, TMsg extends Message> extends ReadonlyAgent<TState> {
+	// TODO: somewhere here must be an .address method to send msg to this
+	// specific agent
+	reduce: Reducer<TState, TMsg>;
+}
+

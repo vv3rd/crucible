@@ -1,5 +1,19 @@
 import { TaskFn } from "./Task";
 
+export type StateRoot = object & Record<string, any>;
+
+export interface Selectable<T> {
+	select: (stateRoot: StateRoot) => T;
+}
+
+export interface Discoverable<T> {
+	discover: (stateRoot: StateRoot) => T;
+}
+
+export interface Matchable<T extends Message> {
+	match: (actionLike: Message) => actionLike is T;
+}
+
 export interface Message<T extends string = string> {
 	type: T;
 	// [key: string]: unknown;
@@ -7,10 +21,6 @@ export interface Message<T extends string = string> {
 
 export interface SomeMessage extends Message {
 	[extraProps: string]: unknown;
-}
-
-export interface Matchable<T extends Message> {
-	match: (actionLike: Message) => actionLike is T;
 }
 
 export interface MessageFactory<
@@ -41,7 +51,6 @@ export interface Dispatch<TMsg extends Message, TState> {
 	<TResult>(task: TaskFn<TState, TMsg, TResult>): TResult;
 	<TResult>(actionOrTask: TMsg | TaskFn<TState, TMsg, TResult>): void | TResult;
 }
-export type Dispatchable<A extends Message, S> = A | TaskFn<S, any>;
 
 // Utils
 

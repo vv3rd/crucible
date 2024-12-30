@@ -7,8 +7,12 @@ import {
 	InferMatch,
 	MadeMessage,
 	CompleteMessageMaker,
+	StateRoot,
+	Discoverable,
+	Selectable,
 } from "./types";
 import { TaskScheduler } from "./Task";
+import { ReducerWithoutAction } from "react";
 
 export interface Reducer<TState, TMsg extends Message> {
 	(
@@ -22,30 +26,40 @@ export namespace Reducer {
 	const InitAction = { type: "INIT-" + Math.random() };
 	const ProbeAction = { type: "PROBE-" + Math.random() };
 
+	type StateOf<R extends Reducer<any, any>> = R extends Reducer<infer S, any>
+		? S
+		: never;
+	type MessageOf<R extends Reducer<any, any>> = R extends Reducer<any, infer M>
+		? M
+		: never;
+
 	export function initialize<TState>(reducer: Reducer<TState, any>) {
 		return reducer(undefined, InitAction, () => {});
 	}
 
-	export function makeDiscoverable<TState, TMsg extends Message>(
-		reducer: Reducer<TState, TMsg>,
-	) {
-		const reducerWithProbeHandling = (
-			was: TState,
-			msg: TMsg,
-			exec: TaskScheduler<TState, TMsg>,
-		) => {
-			if (msg === ProbeAction) {
-				exec((task) => {
-					// TODO: think how and when to record property access with proxy
-					task.getState()
-					// I think getState IS THE FUNCTION I wanna assign
-					// to .select() method on reducer-object 
+	export function makeDiscoverable<R extends Reducer<any, any>>(
+		reducer: R,
+	): R & Selectable<StateOf<R>> {
+		type TState = StateOf<R>;
+		type TMsg = MessageOf<R>;
+		let discoveredSelector: (root: StateRoot) => TState = () => {
+			throw new Error(ERR_SELECT_BEFORE_DISCOVER);
+		};
+		const select: typeof discoveredSelector = (root) =>
+			discoveredSelector(root);
+
+		const discoverableReducer: Reducer<TState, TMsg> = (val, msg, exe) => {
+			if (msg === ProbeAction && val !== undefined) {
+				exe(({ getState }) => {
+					discoveredSelector = getState;
 				});
-				return was;
+				return val;
 			}
 
-			return reducer(was, msg, exec);
+			return reducer(val, msg, exe);
 		};
+
+		return Object.assign(discoverableReducer, { select }, reducer);
 	}
 }
 
@@ -205,3 +219,6 @@ export function buildReducer<T>(getInitialState: () => T) {
 export function createMatcher(type: string) {
 	return (ac: Message): ac is Message => ac.type === type;
 }
+
+const ERR_SELECT_BEFORE_DISCOVER =
+	"Cannot select discoverable state before probe routine completes.";
