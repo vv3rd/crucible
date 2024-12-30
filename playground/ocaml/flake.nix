@@ -14,6 +14,7 @@
           pkgs.ocamlPackages.ocaml-lsp
           pkgs.ocamlPackages.utop
           pkgs.ocaml
+          pkgs.ocamlformat
         ];
       };
     }
