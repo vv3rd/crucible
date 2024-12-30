@@ -124,24 +124,29 @@ export function DrawGraph(history: Git.History): Drawing.Row[] {
 	return [];
 }
 
+interface Joint {
+	beginning: Drawing.Branch[];
+	finishing: Drawing.Branch[];
+}
+
 export namespace Drawing {
 	export class Row {
 		constructor(
 			public commit: Git.Commit,
-			public snapshow: ReadonlyArray<BranchSlice>,
+			public snapshow: ReadonlyArray<BranchNode>,
 		) {}
 	}
 
-	export enum BranchSliceType {
+	export enum BranchNodeType {
 		Ongoing,
 		Merging,
 		Started,
 		Current,
 	}
 
-	export class BranchSlice {
+	export class BranchNode {
 		constructor(
-			public type: BranchSliceType,
+			public type: BranchNodeType,
 			public branch: Branch,
 		) {}
 	}
@@ -150,6 +155,9 @@ export namespace Drawing {
 		column = 0;
 		// cells = new Array<AnyCell>();
 		constructor(public commits: Array<Git.Commit>) {}
+		get length() {
+			return this.commits.length;
+		}
 		get firstCommit() {
 			return this.commits[0];
 		}
@@ -172,23 +180,23 @@ export namespace Drawing {
 	// FIXME: current implementation doesn't work with octopus commits
 	// need to account for casees when merging and starting branches have same position
 	export function drawRow(row: Row) {
-		const columns = Map.groupBy(row.snapshow, (slice) => slice.branch.column);
+		const columns = Map.groupBy(row.snapshow, (node) => node.branch.column);
 
 		const {
 			branch: { column: columnOfCurrentCommit },
-		} = row.snapshow.find((slice) => slice.type === BranchSliceType.Current)!;
+		} = row.snapshow.find((node) => node.type === BranchNodeType.Current)!;
 
 		let rowDrawing = new Array<string>(columns.size);
 		let gap = Gliph.Gap;
 
 		for (let i = 0; i < columnOfCurrentCommit; i++) {
-			const slices = columns.get(i)!;
-			if (slices.length === 2) {
+			const nodes = columns.get(i)!;
+			if (nodes.length === 2) {
 				// TODO: somehow handle drawing starting and merging branch at the same column
 			} else {
-				const [slice] = slices;
-				gap = getGap(slice, gap);
-				rowDrawing[i] = drawSliceBeforeCommit(slice, gap)!;
+				const [node] = nodes;
+				gap = getGap(node, gap);
+				rowDrawing[i] = drawnodeBeforeCommit(node, gap)!;
 			}
 		}
 		{
@@ -196,23 +204,23 @@ export namespace Drawing {
 			rowDrawing[columnOfCurrentCommit] = Gliph.Node;
 		}
 		for (let i = columns.size - 1; i > columnOfCurrentCommit; i--) {
-			const slices = columns.get(i)!;
-			if (slices.length === 2) {
+			const nodes = columns.get(i)!;
+			if (nodes.length === 2) {
 				// TODO: somehow handle drawing starting and merging branch at the same column
 			} else {
-				const [slice] = slices;
-				gap = getGap(slice, gap);
-				rowDrawing[i] = drawSliceAfterCommit(slice, gap)!;
+				const [node] = nodes;
+				gap = getGap(node, gap);
+				rowDrawing[i] = drawnodeAfterCommit(node, gap)!;
 			}
 		}
 
 		return rowDrawing.join("");
 	}
 
-	function getGap(slice: BranchSlice, currentGap: Gliph) {
+	function getGap(node: BranchNode, currentGap: Gliph) {
 		if (
-			slice.type === BranchSliceType.Merging ||
-			slice.type === BranchSliceType.Started
+			node.type === BranchNodeType.Merging ||
+			node.type === BranchNodeType.Started
 		) {
 			return Gliph.EdgeH;
 		} else {
@@ -220,24 +228,24 @@ export namespace Drawing {
 		}
 	}
 
-	function drawSliceAfterCommit(slice: BranchSlice, gap: Gliph) {
-		switch (slice.type) {
-			case BranchSliceType.Ongoing:
+	function drawnodeAfterCommit(node: BranchNode, gap: Gliph) {
+		switch (node.type) {
+			case BranchNodeType.Ongoing:
 				return gap + Gliph.EdgeV;
-			case BranchSliceType.Started:
+			case BranchNodeType.Started:
 				return gap + Gliph.TurnNW;
-			case BranchSliceType.Merging:
+			case BranchNodeType.Merging:
 				return gap + Gliph.TurnSW;
 		}
 	}
 
-	function drawSliceBeforeCommit(slice: BranchSlice, gap: Gliph) {
-		switch (slice.type) {
-			case BranchSliceType.Ongoing:
+	function drawnodeBeforeCommit(node: BranchNode, gap: Gliph) {
+		switch (node.type) {
+			case BranchNodeType.Ongoing:
 				return Gliph.EdgeV + gap;
-			case BranchSliceType.Started:
+			case BranchNodeType.Started:
 				return Gliph.TurnNE + gap;
-			case BranchSliceType.Merging:
+			case BranchNodeType.Merging:
 				return Gliph.TurnSE + gap;
 		}
 	}
