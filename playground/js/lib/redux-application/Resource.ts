@@ -173,8 +173,6 @@ function requireResource<T, R>(
 	context: ResoruceTaskContext<R>,
 ): TaskFn<TGlobalState> {
 	const key = sortStringify(inputs);
-	const selectOwnState = (state: TGlobalState): Resource<R> =>
-		state.cache[key]!;
 
 	return function taskWithCachedPromise(taskApi: TaskApi<TGlobalState>) {
 		const runnningTaskPromise = context.promisesCache.get(key);
@@ -189,52 +187,35 @@ function requireResource<T, R>(
 		}
 	};
 
+	function selectOwnState(state: TGlobalState): Resource<R> {
+		return state.cache[key]!;
+	}
+
 	async function awaitResource(
 		globalTaskApi: TaskApi<TGlobalState>,
 	): Promise<Resource<R>> {
-		const task = TaskApi.scoped(globalTaskApi, selectOwnState);
-		const state = task.getState();
+		const { getState, dispatch, condition } = TaskApi.helper(
+			TaskApi.scoped(globalTaskApi, selectOwnState),
+		);
+		const state = getState();
 		switch (state.status) {
 			case ResourceStatus.Receiving:
 				return state;
 			case ResourceStatus.Closed:
 			case ResourceStatus.Failed:
 			case ResourceStatus.Initial:
-				{
-					const taskId = nanoid(9);
-					task.dispatch(resourceAct.triggered(key, taskId));
-				}
-				try {
-					const output = await runner(inputs);
-					task.dispatch(resourceAct.resolved(key, { output }));
-				} catch (error) {
-					task.dispatch(resourceAct.rejected(key, { error }));
-				}
+				dispatch(resourceAct.triggered(key, nanoid(9)));
+			// TODO: do this in reducer task
+			// try {
+			// 	const output = await runner(inputs);
+			// 	task.dispatch(resourceAct.resolved(key, { output }));
+			// } catch (error) {
+			// 	task.dispatch(resourceAct.rejected(key, { error }));
+			// }
 			// fallthrough
 			case ResourceStatus.Pending: {
-				const settledState = await condition(task, Resource.isSettled);
-				return settledState;
+				return await condition(Resource.isSettled);
 			}
 		}
 	}
-}
-
-async function condition<T, U extends T>(
-	taskApi: TaskApi<T>,
-	checker: (state: T) => state is U,
-): Promise<U>;
-async function condition<T>(
-	taskApi: TaskApi<T>,
-	checker: (state: T) => boolean,
-): Promise<T>;
-async function condition<T>(
-	taskApi: TaskApi<T>,
-	checker: (state: T) => boolean,
-): Promise<T> {
-	let state = taskApi.getState();
-	while (!checker(state)) {
-		await taskApi.nextMessage();
-		state = taskApi.getState();
-	}
-	return state;
 }

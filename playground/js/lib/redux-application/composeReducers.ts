@@ -1,5 +1,5 @@
 import { SomeMessage } from "./types";
-import { TaskScheduler, TaskApi } from "./Task";
+import { TaskScheduler } from "./Task";
 import { Reducer } from "./Reducer";
 
 const { entries } = Object;
@@ -24,7 +24,7 @@ function composeReducersImpl(
 	): TState {
 		let next: TState = current;
 		for (let [key, reducer] of reducers) {
-			const scheduleScoped = scopeSchedulerUnder(key, schedule);
+			const scheduleScoped = TaskScheduler.scoped(schedule, (s) => s[key]);
 			const stateWas = current?.[key];
 			const stateNow = reducer(stateWas, action, scheduleScoped);
 			if (stateWas !== stateNow) {
@@ -36,18 +36,6 @@ function composeReducersImpl(
 		}
 		return next;
 	};
-
-	function scopeSchedulerUnder(
-		key: string,
-		schedule: TaskScheduler<TState, TMsg>,
-	): TaskScheduler<TState, TMsg> {
-		return (taksFn) => {
-			schedule((_taskApi) => {
-				const scopedTaskApi = TaskApi.scoped(_taskApi, (state) => state[key]);
-				return taksFn(scopedTaskApi);
-			});
-		};
-	}
 }
 
 type MessageFromReducer<R> = R extends Reducer<any, infer A> ? A : never;

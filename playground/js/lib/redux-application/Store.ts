@@ -2,6 +2,7 @@ import { Message, Store, ListenerCallback } from "./types";
 import { Reducer } from "./Reducer";
 import { TaskFn, TaskApi } from "./Task";
 import { identity } from "../toolkit";
+import { take } from "rxjs";
 
 type WrappableStoreCreator<
 	TState,
@@ -50,10 +51,20 @@ export function createStoreIml<TState, TMsg extends Message>(
 	let storeDelegate: Store<TState, TMsg>;
 	const realStore: Store<TState, TMsg> = (storeDelegate = {
 		dispatch(msgOrTask: TMsg | TaskFn<TState, TMsg, any>) {
-			const taskApi = TaskApi.fromStore(final());
+			const ab = new AbortController();
+			const taskApi = TaskApi.fromStore(final(), ab.signal);
 			if (msgOrTask instanceof Function) {
 				const task = msgOrTask;
-				return task(taskApi);
+				// TODO: need to handle task aborts in executeTasks too
+				try {
+					const result = task(taskApi);
+					if (result instanceof Promise) {
+						result.finally(() => ab.abort());
+					}
+					return result;
+				} finally {
+					ab.abort();
+				}
 			}
 			const message = msgOrTask;
 			const tasks: TaskFn<TState, TMsg, void>[] = [];

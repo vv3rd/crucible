@@ -4,7 +4,7 @@ import { areArraysEqual, memoLast } from "../toolkit/memoLast";
 
 // TODO:
 // the Agents problem is not solved until I figure out a way to specify
-// how to select agenst module from global state
+// how to select agents module from global state
 export namespace Agent {
 	export function create<TValue, TMsg extends Message>(
 		name: string,
