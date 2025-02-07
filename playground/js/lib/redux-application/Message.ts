@@ -1,4 +1,3 @@
-import { ObjectUnsubscribedError } from "rxjs";
 import {
 	Message,
 	AnyMessageMaker,
@@ -69,8 +68,8 @@ export function defineMessageKind<
 		return "kind" in action && action.kind === KIND;
 	};
 
-    const result = { ...actionMakers, match: matchKind };
-	return result as typeof result & {T: MessageKind}
+	const result = { ...actionMakers, match: matchKind };
+	return result as typeof result & { T: MessageKind };
 }
 
 abstract class MessageBase {

@@ -68,16 +68,14 @@ export function createStoreIml<TState, TMsg extends Message>(
 			}
 			const message = msgOrTask;
 			const tasks: TaskFn<TState, TMsg, void>[] = [];
-			const addTask = tasks.push.bind(tasks);
-			const addTaskRestructed = () => {
-				throw new Error(ERR_SCHEDULER_USED_OUTSIDE_REDUCER);
-			};
-			let scheduler = addTask;
+			let scheduler = tasks.push.bind(tasks);
 			try {
 				storeDelegate = lockedStore;
 				state = reducer(state, message, (task) => scheduler(task));
 			} finally {
-				scheduler = addTaskRestructed;
+				scheduler = () => {
+					throw new Error(ERR_SCHEDULER_USED_OUTSIDE_REDUCER);
+				};
 				storeDelegate = realStore;
 			}
 			executeTasks(tasks, taskApi);

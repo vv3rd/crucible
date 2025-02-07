@@ -16,14 +16,13 @@ export namespace Agent {
 			reduce: reducer,
 			select: (globalState) => {
 				const container = globalState["agents"][name];
-				return container ? select(container) : initial;
+				if (!container) {
+					return { value: Reducer.initialize(reducer), sources };
+				}
+				return select(container);
 			},
 		};
 		const sources = new Set([self]);
-		const initial = {
-			value: Reducer.initialize(reducer),
-			sources,
-		};
 		const select = memoLast((containerState: AgentContainer<TValue>) => ({
 			value: containerState.value,
 			sources,
@@ -124,4 +123,3 @@ interface Agent<TState, TMsg extends Message> extends ReadonlyAgent<TState> {
 	// specific agent
 	reduce: Reducer<TState, TMsg>;
 }
-
