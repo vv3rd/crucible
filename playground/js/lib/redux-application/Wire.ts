@@ -5,7 +5,7 @@
 
 import { defineMessageKind, withPayload } from "./Message";
 import { Reducer } from "./Reducer";
-import { TaskApi, TaskFn } from "./Task";
+import { TaskApi, TasksPool } from "./Task";
 import { Message, StateRoot } from "./types";
 
 const wiringMsg = defineMessageKind("wiring", {
@@ -16,7 +16,7 @@ const wiringMsg = defineMessageKind("wiring", {
 	}>,
 });
 
-function createWired<TState, TMsg extends Message>(
+export function createWired<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 ): Reducer<TState, TMsg> {
 	const wireId = Math.random().toString(36).substring(2);
@@ -28,29 +28,21 @@ function createWired<TState, TMsg extends Message>(
 	};
 }
 
-function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
+export function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
 	const wireMeta: Record<string, (state: WiredStateRoot) => unknown> = {};
 	const probe = wiringMsg.probe({
 		task: (wireId) => (api) => {
 			wireMeta[wireId] = createWireSelector(api.getState);
 		},
 	});
-	const tasks: TaskFn<WiredStateRoot, any, void>[] = [];
-	let scheduler = tasks.push.bind(tasks);
-	reducer(undefined, probe, scheduler);
-	for (const task of tasks) {
-		task({
-			signal: AbortSignal.timeout(0),
-			dispatch() {
-				throw new Error("Forbidden");
-			},
-			nextMessage() {
-				throw new Error("Forbidden");
-			},
-			getState() {
-				return stateGetter();
-			},
-		});
+	const tpb = TasksPool.builder<WiredStateRoot, any>();
+	try {
+		reducer(undefined, probe, tpb.getScheduler());
+	} finally {
+		tpb.lockScheduler();
+	}
+	for (const task of tpb.getTasks()) {
+		task({ ...stubTaskApi, getState: () => stateGetter() });
 	}
 
 	let stateGetter = function lockedStateGetter(): WiredStateRoot {
@@ -86,6 +78,16 @@ function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
 
 	return wiresRootReducer;
 }
+
+const stubTaskApi = {
+	signal: AbortSignal.timeout(0),
+	dispatch() {
+		throw new Error("Forbidden");
+	},
+	nextMessage() {
+		throw new Error("Forbidden");
+	},
+};
 
 const wiring = Symbol();
 

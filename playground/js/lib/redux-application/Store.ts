@@ -1,8 +1,15 @@
 import { Message, Store, ListenerCallback } from "./types";
 import { Reducer } from "./Reducer";
-import { TaskFn, TaskApi } from "./Task";
+import { TaskFn, TaskApi, TasksPool } from "./Task";
 import { identity } from "../toolkit";
-import { take } from "rxjs";
+import {
+	ERR_FINAL_USED_BEFORE_CREATED,
+	ERR_SCHEDULER_USED_OUTSIDE_REDUCER,
+	ERR_LOCKED_UNSUBSCRIBE,
+	ERR_LOCKED_DISPATCH,
+	ERR_LOCKED_SUBSCRIBE,
+	ERR_LOCKED_GETSTATE,
+} from "./Errors.ts";
 
 type WrappableStoreCreator<
 	TState,
@@ -67,18 +74,15 @@ export function createStoreIml<TState, TMsg extends Message>(
 				}
 			}
 			const message = msgOrTask;
-			const tasks: TaskFn<TState, TMsg, void>[] = [];
-			let scheduler = tasks.push.bind(tasks);
+			const tpb = TasksPool.builder<TState, TMsg, void>();
 			try {
 				storeDelegate = lockedStore;
-				state = reducer(state, message, (task) => scheduler(task));
+				state = reducer(state, message, tpb.getScheduler());
 			} finally {
-				scheduler = () => {
-					throw new Error(ERR_SCHEDULER_USED_OUTSIDE_REDUCER);
-				};
+				tpb.lockScheduler();
 				storeDelegate = realStore;
 			}
-			executeTasks(tasks, taskApi);
+			executeTasks(tpb.getTasks(), taskApi);
 			notifyListeners([...listeners], message);
 		},
 
@@ -186,34 +190,3 @@ function runUninterupted<Arg, Func extends (arg: Arg) => void>(
 		onError(error);
 	}
 }
-
-// TODO: make errors helpful
-const ERR_LOCKED_DISPATCH = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-
-const ERR_LOCKED_GETSTATE = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-
-const ERR_LOCKED_SUBSCRIBE = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-
-const ERR_LOCKED_UNSUBSCRIBE = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-
-const ERR_FINAL_USED_BEFORE_CREATED = (() => {
-	let message = "Can't use final store before it is created";
-	return message;
-})();
-
-const ERR_SCHEDULER_USED_OUTSIDE_REDUCER = (() => {
-	let message = "Scheduling tasks is only allowed within reducer execution";
-	return message;
-})();

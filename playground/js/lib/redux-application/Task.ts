@@ -1,3 +1,4 @@
+import { ERR_SCHEDULER_USED_OUTSIDE_REDUCER } from "./Errors";
 import { Matchable, Message, Store } from "./types";
 
 export interface TaskScheduler<TState, TMsg extends Message> {
@@ -12,6 +13,28 @@ export namespace TaskScheduler {
 		(taksFn) => {
 			unscopedScheduler((taskApi) => taksFn(TaskApi.scoped(taskApi, selector)));
 		};
+}
+
+export type TasksPool<TState, TMsg extends Message, TResult> = TaskFn<
+	TState,
+	TMsg,
+	TResult
+>;
+
+export namespace TasksPool {
+	export const builder = <TState, TMsg extends Message, TResult = void>() => {
+		const tasks: TaskFn<TState, TMsg, TResult>[] = [];
+		let scheduler = tasks.push.bind(tasks);
+		return {
+			getTasks: () => [...tasks],
+			getScheduler: (): typeof scheduler => (task) => scheduler(task),
+			lockScheduler: () => {
+				scheduler = () => {
+					throw new Error(ERR_SCHEDULER_USED_OUTSIDE_REDUCER);
+				};
+			},
+		};
+	};
 }
 
 export interface TaskFn<
