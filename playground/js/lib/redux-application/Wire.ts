@@ -1,41 +1,51 @@
-// Wire is a primitive or a tool to help "wiring up" redux/elm application
-// Draft of an idea: { select(stateRoot): T; address(...): ??? } is the primitive to
-// be used by state consumers, making reducers discoverable is a part of lightening the work
-// of wiring up application.
-
-import { defineMessageKind, withPayload } from "./Message";
 import { Reducer } from "./Reducer";
 import { TaskApi, TasksPool } from "./Task";
 import { Message, StateRoot } from "./types";
 
-const wiringMsg = defineMessageKind("wiring", {
-	probe: withPayload<{
-		task: <S, M extends Message>(
-			wireId: string,
-		) => (api: TaskApi<S, M>) => void;
-	}>,
-});
+const probeKey = Symbol();
+type WireProbe = ReturnType<typeof WireProbe>;
+function WireProbe(
+	probeTask: <S, M extends Message>(
+		wireId: string,
+	) => (api: TaskApi<S, M>) => void,
+) {
+	return {
+		type: "@wiring/probe",
+		[probeKey]: probeTask,
+	};
+}
+WireProbe.match = (msg: Message): msg is WireProbe => {
+	return probeKey in msg && typeof msg[probeKey] === "function";
+};
+
+const wiringKey = Symbol();
+interface WiringRoot extends StateRoot {
+	readonly [wiringKey]?: Record<string, (state: WiringRoot) => unknown>;
+}
 
 export function createWired<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 ): Reducer<TState, TMsg> {
 	const wireId = Math.random().toString(36).substring(2);
+	const select = (root: WiringRoot) => {
+		const selector = root?.[wiringKey]?.[wireId];
+
+		return selector?.(root);
+	};
 	return (state, msg, schedule) => {
-		if (wiringMsg.match(msg)) {
-			schedule(msg.payload.task<TState, TMsg>(wireId));
+		if (WireProbe.match(msg)) {
+			schedule(msg[probeKey]<TState, TMsg>(wireId));
 		}
 		return reducer(state, msg, schedule);
 	};
 }
 
-export function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
-	const wireMeta: Record<string, (state: WiredStateRoot) => unknown> = {};
-	const probe = wiringMsg.probe({
-		task: (wireId) => (api) => {
-			wireMeta[wireId] = createWireSelector(api.getState);
-		},
+export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
+	const wireMeta: Record<string, (state: WiringRoot) => unknown> = {};
+	const probe = WireProbe((wireId) => (api) => {
+		wireMeta[wireId] = createWireSelector(api.getState);
 	});
-	const tpb = TasksPool.builder<WiredStateRoot, any>();
+	const tpb = TasksPool.builder<WiringRoot, any>();
 	try {
 		reducer(undefined, probe, tpb.getScheduler());
 	} finally {
@@ -45,7 +55,7 @@ export function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
 		task({ ...stubTaskApi, getState: () => stateGetter() });
 	}
 
-	let stateGetter = function lockedStateGetter(): WiredStateRoot {
+	let stateGetter = function lockedStateGetter(): WiringRoot {
 		throw new Error(
 			"This should not happen unless you doing something " +
 				"very wrong with scoping TaskScheduler-s or TaskApi-s",
@@ -53,7 +63,7 @@ export function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
 	};
 
 	const createWireSelector = (getState: () => unknown) => {
-		return (rootState: WiredStateRoot) => {
+		return (rootState: WiringRoot) => {
 			const previous = stateGetter;
 			stateGetter = () => rootState;
 			try {
@@ -64,19 +74,19 @@ export function createWiresRoot(reducer: Reducer<WiredStateRoot, any>) {
 		};
 	};
 
-	const wiresRootReducer: Reducer<WiredStateRoot, any> = (
+	const wiringRootReducer: Reducer<WiringRoot, any> = (
 		state,
 		msg,
 		schedule,
 	) => {
 		state = reducer(state, msg, schedule);
-		if (!(wiring in state)) {
-			return { ...state, [wiring]: wireMeta };
+		if (!(wiringKey in state)) {
+			state = { ...state, [wiringKey]: wireMeta };
 		}
 		return state;
 	};
 
-	return wiresRootReducer;
+	return wiringRootReducer;
 }
 
 const stubTaskApi = {
@@ -88,9 +98,3 @@ const stubTaskApi = {
 		throw new Error("Forbidden");
 	},
 };
-
-const wiring = Symbol();
-
-interface WiredStateRoot extends StateRoot {
-	readonly [wiring]?: Record<string, (state: WiredStateRoot) => unknown>;
-}
