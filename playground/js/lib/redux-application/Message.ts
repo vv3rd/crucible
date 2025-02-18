@@ -4,31 +4,11 @@ import {
 	AnyMessagePartMaker,
 	CompleteMessageMaker,
 	WithPrefix,
+	MessageWith,
 } from "./types";
 
+const Object = { ...globalThis.Object };
 const { assign, entries, fromEntries } = Object;
-
-export const noPayload = () => {};
-export const withPayload = <T>(payload: T) => ({ payload });
-
-export function defineMessage<TType extends string>(type: TType) {
-	return <TMaker extends (...args: any[]) => Message>(
-		makeMessageMaker: (
-			make: <const P>(payload: P) => { type: TType; payload: P },
-		) => TMaker,
-	) => {
-		const actionMaker = makeMessageMaker((payload) => ({
-			payload,
-			type,
-		}));
-		const matcher = (action: Message): action is ReturnType<TMaker> =>
-			action.type === type;
-		return assign(actionMaker, {
-			type,
-			match: matcher,
-		});
-	};
-}
 
 export function defineMessageKind<
 	TPrefix extends string,
@@ -72,44 +52,42 @@ export function defineMessageKind<
 	return result as typeof result & { T: MessageKind };
 }
 
-abstract class MessageBase {
-	get type() {
-		const constructorTypes: string[] = [];
-		let proto = Object.getPrototypeOf(this);
-		while (proto !== MessageBase.prototype) {
-			constructorTypes.push(proto.constructor.type);
-			proto = Object.getPrototypeOf(proto);
-		}
-		return constructorTypes.join("/");
-	}
-
-	toJSON() {
-		return { ...this, type: this.type };
-	}
+export function createMatcher<M extends Message = Message>(type: string) {
+	return (ac: Message): ac is M => ac.type === type;
 }
 
-interface MessageClass<
-	T extends string,
-	P extends object,
-	B extends MessageBase = MessageBase,
-> {
-	type: T;
-	(payload: P): Readonly<B & P>;
-	new (payload: P): Readonly<B & P>;
+export function Msg<T extends string, P>(
+	type: T,
+	payload: P,
+): MessageWith<P, T>;
+export function Msg<T extends string>(type: T): Message<T>;
+export function Msg<T extends string, P>(type: T, payload?: P) {
+	if (!payload) return { type };
+	else return { type, payload };
 }
 
-const createMessageClass =
-	<T extends string>(type: T) =>
-	<P extends object>() => {
-		const Class = function (this: MessageBase & P, payload: P) {
-			if (this instanceof Class) {
-				Object.assign(this, payload);
-				return this;
-			} else {
-				return new Class(payload);
-			}
-		} as MessageClass<T, P>;
-		Class.prototype = MessageBase.prototype;
-		Class.type = type;
-		return Class;
-	};
+export namespace Msg {
+	export function create<
+		T extends string,
+		M extends (this: Message<T>, ...args: any[]) => Message<T>,
+	>(type: T, createMsg: M) {
+		createMsg = Object.assign(createMsg.bind({ type }), createMsg);
+		const attributes = {
+			match: createMatcher<ReturnType<typeof createMsg>>(type),
+			type,
+		};
+		return Object.assign(createMsg, attributes);
+	}
+
+	// TODO: allow creating a group of messages
+
+	export function ofType<T extends string>(type: T) {
+		return Object.assign(
+			create(type, () => Msg(type)),
+			{
+				withPayload: <P>() => create(type, (payload: P) => Msg(type, payload)),
+				// TODO: figure out how msgs can have traits
+			},
+		);
+	}
+}

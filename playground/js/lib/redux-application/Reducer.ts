@@ -13,6 +13,7 @@ import {
 } from "./types";
 import { TaskScheduler } from "./Task";
 import { ReducerWithoutAction } from "react";
+import { createMatcher } from "./Message";
 
 export interface Reducer<TState, TMsg extends Message> {
 	(
@@ -214,10 +215,6 @@ export function buildReducer<T>(getInitialState: () => T) {
 	const addCase = createAddCase([], {});
 
 	return addCase as AddCase<T, Build<SomeMessage, {}>>;
-}
-
-export function createMatcher(type: string) {
-	return (ac: Message): ac is Message => ac.type === type;
 }
 
 const ERR_SELECT_BEFORE_DISCOVER =

@@ -4,7 +4,6 @@ import { TaskFn, TaskApi, TasksPool } from "./Task";
 import { identity } from "../toolkit";
 import {
 	ERR_FINAL_USED_BEFORE_CREATED,
-	ERR_SCHEDULER_USED_OUTSIDE_REDUCER,
 	ERR_LOCKED_UNSUBSCRIBE,
 	ERR_LOCKED_DISPATCH,
 	ERR_LOCKED_SUBSCRIBE,

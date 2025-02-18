@@ -14,9 +14,18 @@ export interface Matchable<T extends Message> {
 	match: (actionLike: Message) => actionLike is T;
 }
 
-export interface Message<T extends string = string> {
+export namespace Message {
+	export type Type = string | symbol;
+}
+
+export interface Message<T extends Message.Type = Message.Type> {
 	type: T;
 	// [key: string]: unknown;
+}
+
+export interface MessageWith<P, T extends Message.Type = Message.Type>
+	extends Message<T> {
+	payload: P;
 }
 
 export interface SomeMessage extends Message {
