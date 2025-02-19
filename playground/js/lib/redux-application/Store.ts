@@ -9,6 +9,7 @@ import {
 	ERR_LOCKED_SUBSCRIBE,
 	ERR_LOCKED_GETSTATE,
 } from "./Errors.ts";
+import { Msg } from "./Message.ts";
 
 type WrappableStoreCreator<
 	TState,
@@ -54,8 +55,8 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	let state: TState = Reducer.initialize(reducer);
 
-	let storeDelegate: Store<TState, TMsg>;
-	const realStore: Store<TState, TMsg> = (storeDelegate = {
+	let store: Store<TState, TMsg>;
+	const activeStore: Store<TState, TMsg> = (store = {
 		dispatch(msgOrTask: TMsg | TaskFn<TState, TMsg, any>) {
 			const ab = new AbortController();
 			const taskApi = TaskApi.fromStore(final(), ab.signal);
@@ -75,32 +76,28 @@ export function createStoreIml<TState, TMsg extends Message>(
 			const message = msgOrTask;
 			const tpb = TasksPool.builder<TState, TMsg, void>();
 			try {
-				storeDelegate = lockedStore;
+				store = lockedStore;
 				state = reducer(state, message, tpb.getScheduler());
 			} finally {
 				tpb.lockScheduler();
-				storeDelegate = realStore;
+				store = activeStore;
 			}
 			executeTasks(tpb.getTasks(), taskApi);
 			notifyListeners([...listeners], message);
 		},
 
 		subscribe(listener: ListenerCallback<TMsg>) {
-			let isSubscribed = true;
 			listeners.add(listener);
-			function unsubscribe() {
-				if (storeDelegate === lockedStore) {
-					throw new Error(ERR_LOCKED_UNSUBSCRIBE);
-				}
-				if (!isSubscribed) {
-					return;
-				}
-				isSubscribed = false;
-				listeners.delete(listener);
-			}
+			const unsubscribe = () => {
+				store.unsubscribe(listener);
+			};
 			unsubscribe.unsubscribe = unsubscribe;
 			unsubscribe[Symbol.dispose] = unsubscribe;
 			return unsubscribe;
+		},
+
+		unsubscribe(listener) {
+			listeners.delete(listener);
 		},
 
 		getState() {
@@ -110,9 +107,10 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	// biome-ignore format: looks funky
 	return {
-		dispatch:  (action: any) => storeDelegate.dispatch (action  ),
-		getState:  (           ) => storeDelegate.getState (        ),
-		subscribe: (callback   ) => storeDelegate.subscribe(callback),
+		dispatch:    (action: any) => store.dispatch (action    ),
+		getState:    (           ) => store.getState (          ),
+		subscribe:   (callback   ) => store.subscribe(callback  ),
+		unsubscribe: (callback   ) => store.unsubscribe(callback)
 	};
 }
 
@@ -120,11 +118,14 @@ const lockedStore: Store<any, any> = {
 	dispatch() {
 		throw new Error(ERR_LOCKED_DISPATCH);
 	},
+	getState() {
+		throw new Error(ERR_LOCKED_GETSTATE);
+	},
 	subscribe() {
 		throw new Error(ERR_LOCKED_SUBSCRIBE);
 	},
-	getState() {
-		throw new Error(ERR_LOCKED_GETSTATE);
+	unsubscribe() {
+		throw new Error(ERR_LOCKED_SUBSCRIBE);
 	},
 };
 
@@ -189,3 +190,4 @@ function runUninterupted<Arg, Func extends (arg: Arg) => void>(
 		onError(error);
 	}
 }
+

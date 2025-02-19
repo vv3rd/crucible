@@ -8,12 +8,10 @@ import {
 	MadeMessage,
 	CompleteMessageMaker,
 	StateRoot,
-	Discoverable,
 	Selectable,
 } from "./types";
 import { TaskScheduler } from "./Task";
-import { ReducerWithoutAction } from "react";
-import { createMatcher } from "./Message";
+import { createMatcher, Msg } from "./Message";
 
 export interface Reducer<TState, TMsg extends Message> {
 	(
@@ -24,6 +22,27 @@ export interface Reducer<TState, TMsg extends Message> {
 }
 
 export namespace Reducer {
+	export function primitive<T, S extends string>(initialState: T, prefix: S) {
+		const updateMsg = Msg.ofType(`${prefix}/update`).withPayload<
+			T | ((current: T) => T)
+		>();
+		const reducer = (
+			state = initialState,
+			msg: ReturnType<typeof updateMsg>,
+		): T => {
+			if (updateMsg.match(msg)) {
+				if (msg.payload instanceof Function) {
+					return msg.payload(state);
+				} else {
+					return msg.payload;
+				}
+			}
+			return state;
+		};
+		reducer.update = updateMsg;
+		return reducer;
+	}
+
 	const InitAction = { type: "INIT-" + Math.random() };
 	const ProbeAction = { type: "PROBE-" + Math.random() };
 

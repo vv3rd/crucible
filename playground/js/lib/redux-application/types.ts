@@ -53,6 +53,7 @@ export interface Store<TState, TMsg extends Message> {
 	dispatch: Dispatch<TMsg, TState>;
 	getState(): TState;
 	subscribe(listener: ListenerCallback<TMsg>): Subscription;
+	unsubscribe(listener: ListenerCallback<TMsg>): void;
 }
 
 export interface Dispatch<TMsg extends Message, TState> {
