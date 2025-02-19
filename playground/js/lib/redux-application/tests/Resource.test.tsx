@@ -10,11 +10,11 @@ import {
 } from "react";
 import { Await, Catch, sleep } from "./test-utils";
 import { createStore, defaultNotifyListeners } from "../Store";
-import { composeReducers } from "../composeReducers";
 import { Message } from "../types";
+import { Reducer } from "../Reducer";
 
 test("Resource", () => {
-  const reducer = composeReducers({
+  const reducer = Reducer.composed({
     cache: (state = 0, action: Message<"inc"> | Message<"dec">) => {
       switch (action.type) {
         case "inc":
