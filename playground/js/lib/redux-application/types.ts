@@ -15,7 +15,7 @@ export interface Matchable<T extends Message> {
 }
 
 export namespace Message {
-	export type Type = string | symbol;
+	export type Type = string;
 }
 
 export interface Message<T extends Message.Type = Message.Type> {
@@ -67,7 +67,7 @@ export interface Dispatch<TMsg extends Message, TState> {
 export type Real = NonNullable<unknown>;
 export type Dict<T> = Record<string, T>;
 
-type Pretty<T> = { [K in keyof T]: T[K] } & {};
+export type Pretty<T> = { [K in keyof T]: T[K] } & {};
 
 export type InferMatch<M extends Matchable<any>> = M extends Matchable<infer T>
 	? T
@@ -89,3 +89,5 @@ export type CompleteMessageMaker<
 	TType,
 	TMaker extends AnyMessagePartMaker,
 > = MessageFactory<MadeMessage<TType, TMaker>, Parameters<TMaker>>;
+
+
