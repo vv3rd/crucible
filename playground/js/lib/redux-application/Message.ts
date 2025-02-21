@@ -5,6 +5,7 @@ import {
 	CompleteMessageMaker,
 	WithPrefix,
 	MessageWith,
+    Pretty,
 } from "./types";
 
 const Object = { ...globalThis.Object };
@@ -109,11 +110,31 @@ export namespace Msg {
 
 // TODO: allow creating a group of messages
 export namespace MsgFamily {
-	type BuildUtils = {};
 	export function create<
 		S extends string,
-		A extends { [key: string]: Msg.AnyWriter },
-	>(familyName: S, builder: (buildUtils: BuildUtils) => A) {}
+		A extends readonly Msg.AnyWriter[],
+	>(familyName: S, buildFunc: (builder: Builder<S>) => A): CleanupBuilders<MsgFamilyFromWriters<A>, S> {
+		throw new Error("Implement me")
+	}
+
+	const result = create("kek", (msg) => [
+		msg("lol").withPayloadFrom((a: number, b: number) => a + b)
+	])
+
+
+	type Builder<S extends string> = {
+		<T extends Message.Type, _T extends Message.Type = `${S}/${T}`>(type: T): Msg.Writer<_T, () => Message<_T>> & {
+			withPayload: <P>() => Msg.Writer<_T, (payload: P) => MessageWith<P, _T>>
+			withPayloadFrom: <A extends any[], P>(prepare: (...args: A) => P) => Msg.Writer<_T, (...args: A) => MessageWith<P, _T>>
+		}
+	}
+
+	type Prefix<A extends string, B extends string> = `${A}/${B}`
+
+	type MsgFamilyFromWriters<A extends readonly Msg.AnyWriter[]> = KeyByType<A[number]>
+	type CleanupBuilders<T extends {[key: string]: Msg.AnyWriter}, P extends string> = Pretty<{
+		[K in keyof T as K extends `${P}/${infer R}` ? R : never]: T[K]
+	}>
 }
 
 const resultMsg = Msg.create("kek/lol", () => {
@@ -121,3 +142,7 @@ const resultMsg = Msg.create("kek/lol", () => {
 		type: "kek/lol",
 	};
 });
+
+type KeyByType<T extends {type: string}> = Pretty<{
+  [K in T["type"]]: Extract<T, { type: K }>
+}>;
