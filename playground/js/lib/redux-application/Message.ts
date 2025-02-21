@@ -1,58 +1,6 @@
 import { identity } from "../toolkit";
-import {
-	Message,
-	AnyMessageMaker,
-	AnyMessagePartMaker,
-	CompleteMessageMaker,
-	WithPrefix,
-	MessageWith,
-    Pretty,
-} from "./types";
-
-const Object = { ...globalThis.Object };
-const { assign, entries, fromEntries } = Object;
-
-export function defineMessageKind<
-	TPrefix extends string,
-	TMakers extends { [key: string]: AnyMessagePartMaker },
->(prefix: TPrefix, actionPartMakers: TMakers) {
-	type MessageKindMakers = {
-		[K in keyof TMakers]: CompleteMessageMaker<
-			WithPrefix<TPrefix, K>,
-			TMakers[K]
-		>;
-	};
-	type MessageKind = ReturnType<MessageKindMakers[keyof MessageKindMakers]>;
-
-	const KIND = Symbol();
-
-	const actionMakers = fromEntries(
-		entries(actionPartMakers).map(([name, prepare]) => {
-			const match = (action: Message): action is AnyMessageMaker => {
-				return matchKind(action) && action.type === type;
-			};
-			const type = `${prefix}/${name}`;
-			const actionMaker: AnyMessageMaker = assign(
-				(...args: any[]) => ({
-					...prepare(...args),
-					type: type,
-					kind: KIND,
-				}),
-				{ type, match },
-			);
-			return [name, actionMaker];
-		}),
-	) satisfies {
-		[key: string]: AnyMessageMaker;
-	} as MessageKindMakers;
-
-	const matchKind = (action: Message): action is MessageKind => {
-		return "kind" in action && action.kind === KIND;
-	};
-
-	const result = { ...actionMakers, match: matchKind };
-	return result as typeof result & { T: MessageKind };
-}
+import { Fn } from "./Fn";
+import { Message, MessageWith, Pretty } from "./types";
 
 export function createMatcher<M extends Message = Message>(type: string) {
 	return (ac: Message): ac is M => ac.type === type;
@@ -98,8 +46,9 @@ export namespace Msg {
 
 	export function ofType<T extends string>(type: T) {
 		const builders = {
-			withPayload: <P, A extends unknown[] = [payload: P]>(prepare?: (...args: A) => P) => 
-				create(type, (...a: A) => Msg(type, prepare ? prepare(...a) : a[0] as P))
+			withPayload: <P, A extends unknown[] = [payload: P]>(
+				prepare: Fn<A, P> = identity as any,
+			) => create(type, (...a: A) => Msg(type, prepare(...a))),
 		};
 		return Object.assign(
 			create(type, () => Msg(type)),
@@ -109,36 +58,43 @@ export namespace Msg {
 }
 
 export namespace MsgGroup {
-	export function create<
-		S extends string,
-		A extends readonly KeyVal[],
-	>(familyName: S, buildFunc: (b: ReturnType<typeof _builder<S>>) => A) {
-		const messages = buildFunc(_builder(familyName))
-		const result = Object.fromEntries(messages.map(entry => [entry["~key"], entry["~value"]]))
-		return result as KeyValsObj<A[number]>
-		
+	export function create<S extends string, A extends readonly KeyVal[]>(
+		familyName: S,
+		buildFunc: (b: ReturnType<typeof _builder<S>>) => A,
+	) {
+		const messages = buildFunc(_builder(familyName));
+		const result = Object.fromEntries(
+			messages.map((entry) => [entry[0], entry[1]]),
+		);
+		return result as KeyValsObj<A[number]>;
 	}
 
-	const _builder = <S extends string>(prefix: S) => <T extends string>(type: T) => {
-        const fullType = `${prefix}/${type}` as const;
-		return {
-			"~key": type,
-			"~value": Msg.create(fullType, () => Msg(fullType)),
-			withPayload: <P, A extends any[] = [payload: P]>(prepare?: (...a: A) => P) => ({
-				"~key": type,
-				"~value": Msg.create(fullType, (...a: A) => Msg(fullType, prepare ? prepare(...a) : a[0] as P ))
-			}),
-		}
-	}
+	const _builder =
+		<S extends string>(prefix: S) =>
+		<T extends string>(type: T) => {
+			const fullType = `${prefix}/${type}` as const;
+			return {
+				0: type,
+				1: Msg.create(fullType, () => Msg(fullType)),
+				withPayload: <P, A extends any[] = [payload: P]>(
+					prepare: Fn<A, P> = identity as any,
+				) => ({
+					0: type,
+					1: Msg.create(fullType, (...a: A) => Msg(fullType, prepare(...a))),
+				}),
+			};
+		};
 
 	interface KeyVal<V = any> {
-	    "~key": string;
-	    "~value": V;
+		0: string;
+		1: V;
 	}
 
 	type KeyValsObj<T extends KeyVal> = Pretty<{
-	  [K in T["~key"]]: Extract<T, { "~key": K }>["~value"]
+		[K in T[0]]: Extract<T, { 0: K }>[1];
 	}>;
 }
 
-const resultMsg = Msg.ofType("kek/lol").withPayload((a: number, b: number) => a + b)
+const resultMsg = Msg.ofType("kek/lol").withPayload(
+	(a: number, b: number) => a + b,
+);

@@ -67,27 +67,5 @@ export interface Dispatch<TMsg extends Message, TState> {
 export type Real = NonNullable<unknown>;
 export type Dict<T> = Record<string, T>;
 
+export type Falsy = null | undefined | false | "" | 0 | 0n;
 export type Pretty<T> = { [K in keyof T]: T[K] } & {};
-
-export type InferMatch<M extends Matchable<any>> = M extends Matchable<infer T>
-	? T
-	: never;
-
-export type WithPrefix<P, A> = `${Extract<P, string>}/${Extract<A, string>}`;
-
-export type AnyMessageMaker = MessageFactory<Message, any[]>;
-
-export type AnyMessagePartMaker =
-	| { (...args: any[]): { payload: any } }
-	| { (): void };
-
-export type MadeMessage<TType, TMaker extends AnyMessagePartMaker> = Pretty<
-	{ type: Extract<TType, string> } & ReturnType<TMaker>
->;
-
-export type CompleteMessageMaker<
-	TType,
-	TMaker extends AnyMessagePartMaker,
-> = MessageFactory<MadeMessage<TType, TMaker>, Parameters<TMaker>>;
-
-

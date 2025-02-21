@@ -144,17 +144,17 @@ type TGlobalState = {
 };
 
 const messageAtResource = (key: string, taskId: string) => ({
-		key,
-		taskId,
+	key,
+	taskId,
 });
 
-const resourceAct = MsgGroup.create("cache", msg => [
+const resourceAct = MsgGroup.create("cache", (msg) => [
 	msg("triggered").withPayload(messageAtResource),
-	msg('resolved').withPayload<{output: unknown, key: string}>(),
-	msg('rejected').withPayload<{output: unknown; key: string}>(),
+	msg("resolved").withPayload<{ output: unknown; key: string }>(),
+	msg("rejected").withPayload<{ output: unknown; key: string }>(),
 	msg("aborted").withPayload(messageAtResource),
 	msg("updated").withPayload(messageAtResource),
-])
+]);
 
 function reduceResourceCache<R>() {}
 

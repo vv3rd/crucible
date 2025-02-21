@@ -1,5 +1,5 @@
 import { ERR_SCHEDULER_USED_OUTSIDE_REDUCER } from "./Errors";
-import { Matchable, Message, Store } from "./types";
+import { Falsy, Matchable, Message, Store } from "./types";
 
 export interface TaskScheduler<TState, TMsg extends Message> {
 	(task: TaskFn<TState, TMsg, void>): void;
@@ -88,7 +88,7 @@ export namespace TaskApi {
 		};
 	};
 
-	export function helper<T>(taskApi: TaskApi<T>) {
+	export function helper<T, M extends Message>(taskApi: TaskApi<T, M>) {
 		async function condition<U extends T>(
 			checker: (state: T) => state is U,
 		): Promise<U>;
@@ -99,6 +99,13 @@ export namespace TaskApi {
 				state = taskApi.getState();
 			}
 			return state;
+		}
+
+		async function truthy<U>(selector: (state: T) => U | Falsy): Promise<U> {
+			let result;
+			while (!(result = selector(taskApi.getState())))
+				await taskApi.nextMessage();
+			return result;
 		}
 
 		async function take<T extends Message>(matcher: Matchable<T>): Promise<T> {
@@ -119,6 +126,7 @@ export namespace TaskApi {
 		return {
 			...taskApi,
 			condition,
+			truthy,
 			take,
 			stream,
 		};

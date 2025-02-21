@@ -10,22 +10,25 @@ import {
 } from "react";
 import { Await, Catch, sleep } from "./test-utils";
 import { createStore, defaultNotifyListeners } from "../Store";
-import { Message } from "../types";
+import { Message, MessageWith } from "../types";
 import { Reducer } from "../Reducer";
+import { TaskApi } from "../Task";
 
 test("Resource", () => {
+  type State = null | {
+    count: number;
+  };
+  const cacheR: Reducer<State, MessageWith<number, "inc"> | Message<"dec">> = (
+    state = null,
+    action,
+    schedule,
+  ) => {
+    return state;
+  };
   const reducer = Reducer.composed({
-    cache: (state = 0, action: Message<"inc"> | Message<"dec">) => {
-      switch (action.type) {
-        case "inc":
-          return state + 1;
-        case "dec":
-          return state - 1;
-        default:
-          return state;
-      }
-    },
+    cache: cacheR,
   });
+
   const store = createStore(reducer);
 
   function App() {

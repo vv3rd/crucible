@@ -4,12 +4,11 @@ import { TaskFn, TaskApi, TasksPool } from "./Task";
 import { identity } from "../toolkit";
 import {
 	ERR_FINAL_USED_BEFORE_CREATED,
-	ERR_LOCKED_UNSUBSCRIBE,
 	ERR_LOCKED_DISPATCH,
 	ERR_LOCKED_SUBSCRIBE,
 	ERR_LOCKED_GETSTATE,
+	ERR_LOCKED_UNSUBSCRIBE,
 } from "./Errors.ts";
-import { Msg } from "./Message.ts";
 
 type WrappableStoreCreator<
 	TState,
@@ -125,7 +124,7 @@ const lockedStore: Store<any, any> = {
 		throw new Error(ERR_LOCKED_SUBSCRIBE);
 	},
 	unsubscribe() {
-		throw new Error(ERR_LOCKED_SUBSCRIBE);
+		throw new Error(ERR_LOCKED_UNSUBSCRIBE);
 	},
 };
 
@@ -190,4 +189,3 @@ function runUninterupted<Arg, Func extends (arg: Arg) => void>(
 		onError(error);
 	}
 }
-

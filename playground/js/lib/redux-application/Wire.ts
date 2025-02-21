@@ -9,7 +9,7 @@ type ProbeTask = <S, M extends Message>(
 	wireId: string,
 ) => (api: TaskApi<S, M>) => void;
 
-const WireProbeMsg = Msg.ofType("@wiring/probe").withPayloadFrom(
+const WireProbeMsg = Msg.ofType("@wiring/probe").withPayload(
 	(task: ProbeTask) => ({ [probeKey]: task }),
 );
 
