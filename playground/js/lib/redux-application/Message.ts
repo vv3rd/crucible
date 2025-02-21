@@ -1,3 +1,4 @@
+import { identity } from "../toolkit";
 import {
 	Message,
 	AnyMessageMaker,
@@ -97,9 +98,8 @@ export namespace Msg {
 
 	export function ofType<T extends string>(type: T) {
 		const builders = {
-			withPayload: <P>() => create(type, (payload: P) => Msg(type, payload)),
-			withPayloadFrom: <A extends unknown[], P>(prepare: (...args: A) => P) =>
-				create(type, (...a: A) => Msg(type, prepare(...a))),
+			withPayload: <P, A extends unknown[] = [payload: P]>(prepare?: (...args: A) => P) => 
+				create(type, (...a: A) => Msg(type, prepare ? prepare(...a) : a[0] as P))
 		};
 		return Object.assign(
 			create(type, () => Msg(type)),
@@ -108,41 +108,37 @@ export namespace Msg {
 	}
 }
 
-// TODO: allow creating a group of messages
-export namespace MsgFamily {
+export namespace MsgGroup {
 	export function create<
 		S extends string,
-		A extends readonly Msg.AnyWriter[],
-	>(familyName: S, buildFunc: (builder: Builder<S>) => A): CleanupBuilders<MsgFamilyFromWriters<A>, S> {
-		throw new Error("Implement me")
+		A extends readonly KeyVal[],
+	>(familyName: S, buildFunc: (b: ReturnType<typeof _builder<S>>) => A) {
+		const messages = buildFunc(_builder(familyName))
+		const result = Object.fromEntries(messages.map(entry => [entry["~key"], entry["~value"]]))
+		return result as KeyValsObj<A[number]>
+		
 	}
 
-	const result = create("kek", (msg) => [
-		msg("lol").withPayloadFrom((a: number, b: number) => a + b)
-	])
-
-
-	type Builder<S extends string> = {
-		<T extends Message.Type, _T extends Message.Type = `${S}/${T}`>(type: T): Msg.Writer<_T, () => Message<_T>> & {
-			withPayload: <P>() => Msg.Writer<_T, (payload: P) => MessageWith<P, _T>>
-			withPayloadFrom: <A extends any[], P>(prepare: (...args: A) => P) => Msg.Writer<_T, (...args: A) => MessageWith<P, _T>>
+	const _builder = <S extends string>(prefix: S) => <T extends string>(type: T) => {
+        const fullType = `${prefix}/${type}` as const;
+		return {
+			"~key": type,
+			"~value": Msg.create(fullType, () => Msg(fullType)),
+			withPayload: <P, A extends any[] = [payload: P]>(prepare?: (...a: A) => P) => ({
+				"~key": type,
+				"~value": Msg.create(fullType, (...a: A) => Msg(fullType, prepare ? prepare(...a) : a[0] as P ))
+			}),
 		}
 	}
 
-	type Prefix<A extends string, B extends string> = `${A}/${B}`
+	interface KeyVal<V = any> {
+	    "~key": string;
+	    "~value": V;
+	}
 
-	type MsgFamilyFromWriters<A extends readonly Msg.AnyWriter[]> = KeyByType<A[number]>
-	type CleanupBuilders<T extends {[key: string]: Msg.AnyWriter}, P extends string> = Pretty<{
-		[K in keyof T as K extends `${P}/${infer R}` ? R : never]: T[K]
-	}>
+	type KeyValsObj<T extends KeyVal> = Pretty<{
+	  [K in T["~key"]]: Extract<T, { "~key": K }>["~value"]
+	}>;
 }
 
-const resultMsg = Msg.create("kek/lol", () => {
-	return {
-		type: "kek/lol",
-	};
-});
-
-type KeyByType<T extends {type: string}> = Pretty<{
-  [K in T["type"]]: Extract<T, { type: K }>
-}>;
+const resultMsg = Msg.ofType("kek/lol").withPayload((a: number, b: number) => a + b)

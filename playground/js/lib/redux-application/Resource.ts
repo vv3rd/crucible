@@ -1,4 +1,4 @@
-import { defineMessageKind } from "./Message";
+import { MsgGroup } from "./Message";
 import { Dict, Message } from "./types";
 import { TaskApi, TaskFn } from "./Task";
 import { nanoid } from "nanoid";
@@ -144,26 +144,17 @@ type TGlobalState = {
 };
 
 const messageAtResource = (key: string, taskId: string) => ({
-	payload: {
 		key,
 		taskId,
-	},
 });
 
-const dataAtResource = <T>(key: string, data: T) => ({
-	payload: {
-		...data,
-		key: key,
-	},
-});
-
-const resourceAct = defineMessageKind("cache", {
-	triggered: messageAtResource,
-	resolved: dataAtResource<{ output: unknown }>,
-	rejected: dataAtResource<{ error: unknown }>,
-	aborted: messageAtResource,
-	updated: messageAtResource,
-});
+const resourceAct = MsgGroup.create("cache", msg => [
+	msg("triggered").withPayload(messageAtResource),
+	msg('resolved').withPayload<{output: unknown, key: string}>(),
+	msg('rejected').withPayload<{output: unknown; key: string}>(),
+	msg("aborted").withPayload(messageAtResource),
+	msg("updated").withPayload(messageAtResource),
+])
 
 function reduceResourceCache<R>() {}
 
