@@ -1,6 +1,6 @@
 import { Message, Store, ListenerCallback } from "./types";
 import { Reducer } from "./Reducer";
-import { AnyTaskFn, TaskFn } from "./Task";
+import { AnyTaskFn, TaskApi, TaskFn } from "./Task";
 import { identity } from "../toolkit";
 import {
 	ERR_FINAL_USED_BEFORE_CREATED,
@@ -65,7 +65,8 @@ export function createStoreIml<TState, TMsg extends Message>(
 				delegate = activeStore;
 				tpb.lockScheduler();
 			}
-			execute([...tpb.getTasks(), ...listeners], getFinalStore());
+			execute(tpb.getTasks(), getFinalStore());
+			execute([...listeners], getFinalStore());
 		},
 
 		subscribe(listener: ListenerCallback) {
@@ -104,7 +105,7 @@ const lockedStore: Store<any, any> = {
 
 const execute = <Ts extends AnyTaskFn[]>(
 	tasks: Ts,
-	store: Store<TaskFn.InferState<Ts[number]>, TaskFn.InferMsg<Ts[number]>>,
+	store: Store<any, any>,
 ): ReturnType<Ts[0]> => {
 	throw new Error("todo");
 };
