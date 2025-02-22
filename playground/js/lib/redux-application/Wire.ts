@@ -1,13 +1,12 @@
+import { FUCK_TASK_NOT_REAL } from "./Errors";
 import { Msg } from "./Message";
 import { Reducer } from "./Reducer";
-import { TaskApi, TasksPool } from "./Task";
+import { TaskApi, TaskFn } from "./Task";
 import { Message, StateRoot } from "./types";
 
 const probeKey = Symbol();
-type WireProbe = ReturnType<typeof WireProbeMsg>;
-type ProbeTask = <S, M extends Message>(
-	wireId: string,
-) => (api: TaskApi<S, M>) => void;
+// type WireProbe = ReturnType<typeof WireProbeMsg>;
+type ProbeTask = <S>(wireId: string) => (api: TaskApi<S>) => void;
 
 const WireProbeMsg = Msg.ofType("@wiring/probe").withPayload(
 	(task: ProbeTask) => ({ [probeKey]: task }),
@@ -22,14 +21,15 @@ export function createWired<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 ): Reducer<TState, TMsg> {
 	const wireId = Math.random().toString(36).substring(2);
-	const select = (root: WiringRoot) => {
-		const selector = root?.[wiringKey]?.[wireId];
+	// TODO: implement this
+	// const select = (root: WiringRoot) => {
+	// 	const selector = root?.[wiringKey]?.[wireId];
 
-		return selector?.(root);
-	};
+	// 	return selector?.(root);
+	// };
 	return (state, msg, schedule) => {
 		if (WireProbeMsg.match(msg)) {
-			schedule(msg.payload[probeKey]<TState, TMsg>(wireId));
+			schedule(msg.payload[probeKey]<TState>(wireId));
 		}
 		return reducer(state, msg, schedule);
 	};
@@ -40,7 +40,7 @@ export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
 	const probeMsg = WireProbeMsg((wireId) => (api) => {
 		wireMeta[wireId] = createWireSelector(api.getState);
 	});
-	const tpb = TasksPool.builder<WiringRoot, any>();
+	const tpb = TaskFn.pool<WiringRoot, any>();
 	try {
 		reducer(undefined, probeMsg, tpb.getScheduler());
 	} finally {
@@ -84,12 +84,15 @@ export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
 	return wiringRootReducer;
 }
 
-const stubTaskApi = {
-	signal: AbortSignal.timeout(0),
+const stubTaskApi: TaskApi<any> = {
+	signal: AbortSignal.abort(),
 	dispatch() {
-		throw new Error("Forbidden");
+		throw new Error(FUCK_TASK_NOT_REAL);
 	},
 	nextMessage() {
-		throw new Error("Forbidden");
+		throw new Error(FUCK_TASK_NOT_REAL);
+	},
+	getState() {
+		throw new Error(FUCK_TASK_NOT_REAL);
 	},
 };

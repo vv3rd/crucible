@@ -1,14 +1,8 @@
 import { Message, Store, ListenerCallback } from "./types";
 import { Reducer } from "./Reducer";
-import { AnyTaskFn, TaskApi, TaskFn } from "./Task";
+import { TaskApi, TaskFn } from "./Task";
 import { identity } from "../toolkit";
-import {
-	ERR_FINAL_USED_BEFORE_CREATED,
-	ERR_LOCKED_DISPATCH,
-	ERR_LOCKED_SUBSCRIBE,
-	ERR_LOCKED_GETSTATE,
-	ERR_LOCKED_UNSUBSCRIBE,
-} from "./Errors.ts";
+import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
 
 type WrappableStoreCreator<
 	TState,
@@ -23,20 +17,22 @@ export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	overlay: StoreOverlay<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
-	let delegateGetFinal = (): typeof store => {
+	let storeAccessor = (): typeof store => {
 		try {
 			return store;
 		} catch (error) {
-			throw new Error(ERR_FINAL_USED_BEFORE_CREATED, { cause: error });
+			throw new Error(FUCK_INTERNALS_USED, { cause: error });
 		}
 	};
-	const getFinalStore = () => delegateGetFinal();
-	const store: Store<TState, TMsg> = overlay(createStoreIml)(
-		reducer,
-		undefined,
-		getFinalStore,
-	);
-	delegateGetFinal = () => store;
+	let tasksExecutor: Executor = () => {
+		throw new Error(FUCK_INTERNALS_USED);
+	};
+	const store: Store<TState, TMsg> = overlay(createStoreIml)(reducer, {
+		storeAccessor: () => storeAccessor(),
+		tasksExecutor: (f, p) => tasksExecutor(f, p),
+	});
+	storeAccessor = () => store;
+	tasksExecutor = defaultExecutor;
 	return store;
 }
 
@@ -44,36 +40,40 @@ export function createStore<TState, TMsg extends Message>(
 
 export function createStoreIml<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
-	effects: any,
-	getFinalStore: () => Store<TState, TMsg>,
+	internals: Internals<TState, TMsg>,
 ): Store<TState, TMsg> {
-	const listeners: Set<ListenerCallback> = new Set();
+	const {
+		//
+		tasksExecutor: executeTasks,
+		storeAccessor: getFinalStore,
+	} = internals;
+	const listeners: Set<ListenerCallback<TMsg>> = new Set();
+	const getTaskApi = () => TaskApi.fromStore(getFinalStore());
 
 	let state: TState = Reducer.initialize(reducer);
 
-	let delegate: Store<TState, TMsg>;
-	const activeStore: Store<TState, TMsg> = (delegate = {
-		dispatch(msgLike: TMsg | TaskFn<TState, TMsg, any>) {
-			if (typeof msgLike === "function") {
-				return execute([msgLike], getFinalStore());
+	const activeStore: Store<TState, TMsg> = {
+		dispatch(msgOrTask: Message<any> | TaskFn<TState, any>) {
+			if (typeof msgOrTask === "function") {
+				const task = msgOrTask;
+				return executeTasks([task], getTaskApi);
 			}
-			const tpb = TaskFn.pool<TState, TMsg, void>();
+			const msg = msgOrTask as TMsg;
+			const tpb = TaskFn.pool<TState, void>();
 			try {
 				delegate = lockedStore;
-				state = reducer(state, msgLike, tpb.getScheduler());
+				state = reducer(state, msg, tpb.getScheduler());
 			} finally {
 				delegate = activeStore;
 				tpb.lockScheduler();
 			}
-			execute(tpb.getTasks(), getFinalStore());
-			execute([...listeners], getFinalStore());
+			executeTasks([...listeners], msg);
+			executeTasks(tpb.getTasks(), getTaskApi);
 		},
 
-		subscribe(listener: ListenerCallback) {
+		subscribe(listener) {
 			listeners.add(listener);
 			const unsubscribe = () => delegate.unsubscribe(listener);
-			unsubscribe.unsubscribe = unsubscribe;
-			unsubscribe[Symbol.dispose] = unsubscribe;
 			return unsubscribe;
 		},
 
@@ -84,41 +84,54 @@ export function createStoreIml<TState, TMsg extends Message>(
 		getState() {
 			return state;
 		},
-	});
+	};
 
-	// biome-ignore format: looks funky
+	let delegate: Store<TState, TMsg> = activeStore;
+
+	// biome-ignore format: better visual
 	return {
-		dispatch:    (action: any) => delegate.dispatch (action    ),
-		getState:    (           ) => delegate.getState (          ),
-		subscribe:   (callback   ) => delegate.subscribe(callback  ),
-		unsubscribe: (callback   ) => delegate.unsubscribe(callback)
+		dispatch: (action: any) => delegate.dispatch(action),
+		getState:            () => delegate.getState(),
+		subscribe:   (callback) => delegate.subscribe(callback),
+		unsubscribe: (callback) => delegate.unsubscribe(callback),
 	};
 }
 
-// biome-ignore format: looks funky
+// biome-ignore format: saves space
 const lockedStore: Store<any, any> = {
-	dispatch()    { throw new Error(ERR_LOCKED_DISPATCH);    },
-	getState()    { throw new Error(ERR_LOCKED_GETSTATE);    },
-	subscribe()   { throw new Error(ERR_LOCKED_SUBSCRIBE);   },
-	unsubscribe() { throw new Error(ERR_LOCKED_UNSUBSCRIBE); },
+	dispatch() { throw new Error(FUCK_STORE_LOCKED); },
+	getState() { throw new Error(FUCK_STORE_LOCKED); },
+	subscribe() { throw new Error(FUCK_STORE_LOCKED); },
+	unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },
 };
 
-const execute = <Ts extends AnyTaskFn[]>(
-	tasks: Ts,
-	store: Store<any, any>,
-): ReturnType<Ts[0]> => {
-	throw new Error("todo");
+type Internals<TState, TMsg extends Message> = {
+	tasksExecutor: Executor;
+	storeAccessor: () => Store<TState, TMsg>;
 };
 
-function runUninterupted<Arg, Func extends (arg: Arg) => void>(
-	callbacks: readonly Func[],
-	arg: Arg,
-	onError: (error: unknown) => void,
-) {
-	const errors: unknown[] = [];
-	for (const func of callbacks) {
+type Executor = <A, Fs extends Array<(arg: A) => any>>(
+	funcs: Fs,
+	param: A | (() => A),
+) => ReturnType<Fs[0]>;
+
+const defaultExecutor: Executor = (funcs, param) => {
+	const onError = console.error;
+	if (param instanceof Function) {
+		param = param();
+	}
+	const firstFunc = funcs[0];
+	if (firstFunc) {
 		try {
-			func(arg);
+			var result = firstFunc(param);
+		} catch (err) {
+			var error = err;
+		}
+	}
+	const errors: unknown[] = [];
+	for (const func of funcs) {
+		try {
+			func(param);
 		} catch (err) {
 			errors.push(err);
 		}
@@ -126,4 +139,9 @@ function runUninterupted<Arg, Func extends (arg: Arg) => void>(
 	for (const error of errors) {
 		onError(error);
 	}
-}
+	if (error) {
+		throw error;
+	} else {
+		return result;
+	}
+};

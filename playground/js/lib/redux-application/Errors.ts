@@ -1,25 +1,11 @@
 // TODO: make errors helpful
-export const ERR_LOCKED_DISPATCH = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-export const ERR_LOCKED_GETSTATE = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-export const ERR_LOCKED_SUBSCRIBE = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-export const ERR_LOCKED_UNSUBSCRIBE = (() => {
-	let message = "Store is locked on dispatch";
-	return message;
-})();
-export const ERR_FINAL_USED_BEFORE_CREATED = (() => {
-	let message = "Can't use final store before it is created";
-	return message;
-})();
-export const ERR_SCHEDULER_USED_OUTSIDE_REDUCER = (() => {
-	let message = "Scheduling tasks is only allowed within reducer execution";
-	return message;
-})();
+export const FUCK_STORE_LOCKED = "Store is locked on dispatch";
+
+export const FUCK_INTERNALS_USED =
+	"Can't use internal store methods before store created";
+
+export const FUCK_TASK_POOL_CLOSED =
+	"Can't schedule task once reducer returned";
+
+export const FUCK_TASK_NOT_REAL = "Taks api on wire probe message is a stub";
+

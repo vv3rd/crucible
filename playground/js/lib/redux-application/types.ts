@@ -40,26 +40,27 @@ export interface MessageFactory<
 	type: A["type"];
 }
 
-export interface Subscription extends Disposable {
-	unsubscribe(): void;
+export interface Subscription {
+	// extends Disposable {
+	// unsubscribe(): void;
 	(): void;
 }
 
-export interface ListenerCallback {
-	(): void;
+export interface ListenerCallback<TMsg> {
+	(message: TMsg): void;
 }
 
 export interface Store<TState, TMsg extends Message> {
-	dispatch: Dispatch<TMsg, TState>;
+	dispatch: Dispatch<TMsg | SomeMessage, TState>;
 	getState(): TState;
-	subscribe(listener: ListenerCallback): Subscription;
-	unsubscribe(listener: ListenerCallback): void;
+	subscribe(listener: ListenerCallback<TMsg>): Subscription;
+	unsubscribe(listener: ListenerCallback<TMsg>): void;
 }
 
 export interface Dispatch<TMsg extends Message, TState> {
 	(action: TMsg): void;
-	<TResult>(task: TaskFn<TState, TMsg, TResult>): TResult;
-	<TResult>(actionOrTask: TMsg | TaskFn<TState, TMsg, TResult>): void | TResult;
+	<TResult>(task: TaskFn<TState, TResult>): TResult;
+	<TResult>(actionOrTask: TMsg | TaskFn<TState, TResult>): void | TResult;
 }
 
 // Utils

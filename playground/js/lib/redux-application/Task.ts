@@ -1,34 +1,20 @@
-import { ERR_SCHEDULER_USED_OUTSIDE_REDUCER } from "./Errors";
-import { Falsy, Matchable, Message, Store } from "./types";
+import { FUCK_TASK_POOL_CLOSED } from "./Errors";
+import { Matchable, Message, SomeMessage, Store } from "./types";
 
-export interface TaskScheduler<TState, TMsg extends Message> {
-	(task: TaskFn<TState, TMsg, void>): void;
-}
-export namespace TaskScheduler {
-	export const scoped =
-		<TStateA, TStateB, TMsg extends Message>(
-			unscopedScheduler: TaskScheduler<TStateA, TMsg>,
-			selector: (state: TStateA) => TStateB,
-		): TaskScheduler<TStateB, TMsg> =>
-		(taksFn) => {
-			unscopedScheduler((taskApi) => taksFn(TaskApi.scoped(taskApi, selector)));
-		};
+export type AnyTaskFn<R = any> = TaskFn<any, R>;
+export interface TaskFn<TState, TResult = void> {
+	(taskApi: TaskApi<TState>): TResult;
 }
 
-export type AnyTaskFn<R = any> = TaskFn<any, any, R>;
-export interface TaskFn<
-	TState,
-	TMsg extends Message = Message,
-	TResult = void,
-> {
-	(taskApi: TaskApi<TState, TMsg>): TResult;
+export interface TaskApi<TState> {
+	signal: AbortSignal;
+	dispatch: (message: SomeMessage) => void;
+	getState: () => TState;
+	nextMessage: () => Promise<SomeMessage>;
 }
 
 export namespace TaskFn {
-	export function execute<R, S, M extends Message>(
-		task: TaskFn<S, M, R>,
-		store: Store<any, any>,
-	): R {
+	export function execute<R, S>(task: TaskFn<S, R>, store: Store<any, any>): R {
 		const ab = new AbortController();
 		const api = { ...TaskApi.fromStore(store), signal: ab.signal };
 		let result: R;
@@ -43,49 +29,41 @@ export namespace TaskFn {
 		return result;
 	}
 
-	export const pool = <TState, TMsg extends Message, TResult = void>() => {
-		const tasks: TaskFn<TState, TMsg, TResult>[] = [];
+	export const pool = <TState, TResult = void>() => {
+		const tasks: TaskFn<TState, TResult>[] = [];
 		let scheduler = tasks.push.bind(tasks);
 		return {
 			getTasks: () => [...tasks],
 			getScheduler: (): typeof scheduler => (task) => scheduler(task),
 			lockScheduler: () => {
 				scheduler = () => {
-					throw new Error(ERR_SCHEDULER_USED_OUTSIDE_REDUCER);
+					throw new Error(FUCK_TASK_POOL_CLOSED);
 				};
 			},
 		};
 	};
-	export type InferMsg<R> = R extends TaskFn<any, infer A, any> ? A : never;
-	export type InferState<R> = R extends TaskFn<infer S, any, any> ? S : never;
-}
-
-export interface TaskApi<TState, TMsg extends Message = Message> {
-	signal: AbortSignal;
-	dispatch: (actionOrTask: TMsg) => void;
-	getState: () => TState;
-	nextMessage: () => Promise<TMsg>;
+	export type InferState<R> = R extends TaskFn<infer S, any> ? S : never;
 }
 
 export namespace TaskApi {
-	export const scoped = <TStateA, TStateB, TMsg extends Message>(
-		taskApi: TaskApi<TStateA, TMsg>,
+	export const scoped = <TStateA, TStateB>(
+		taskApi: TaskApi<TStateA>,
 		seletor: (state: TStateA) => TStateB,
-	): TaskApi<TStateB, TMsg> => {
+	): TaskApi<TStateB> => {
 		return {
 			...taskApi,
 			getState: () => seletor(taskApi.getState()),
 		};
 	};
 
-	export const fromStore = <TState, TMsg extends Message>(
-		store: Store<TState, TMsg>,
+	export const fromStore = <TState>(
+		store: Store<TState, any>,
 		signal = AbortSignal.abort(),
-	): TaskApi<TState, TMsg> => {
-		let nextMessage: Promise<TMsg> | undefined;
+	): TaskApi<TState> => {
+		let nextMessage: Promise<SomeMessage> | undefined;
 		const getNextMessage = () => {
 			if (!nextMessage) {
-				nextMessage = new Promise<TMsg>((resolve) => {
+				nextMessage = new Promise((resolve) => {
 					const unsubscribe = store.subscribe((message) => {
 						nextMessage = undefined;
 						unsubscribe();
@@ -97,13 +75,15 @@ export namespace TaskApi {
 		};
 		return {
 			signal,
-			dispatch: store.dispatch,
 			getState: store.getState,
+			dispatch: store.dispatch,
 			nextMessage: getNextMessage,
 		};
 	};
 
-	export function helper<T, M extends Message>(taskApi: TaskApi<T, M>) {
+	export function helper<T>(taskApi: TaskApi<T>) {
+		async function condition(checker: (state: T) => boolean): Promise<T>;
+
 		async function condition<U extends T>(
 			checker: (state: T) => state is U,
 		): Promise<U>;
@@ -114,13 +94,6 @@ export namespace TaskApi {
 				state = taskApi.getState();
 			}
 			return state;
-		}
-
-		async function truthy<U>(selector: (state: T) => U | Falsy): Promise<U> {
-			let result;
-			while (!(result = selector(taskApi.getState())))
-				await taskApi.nextMessage();
-			return result;
 		}
 
 		async function take<T extends Message>(matcher: Matchable<T>): Promise<T> {
@@ -141,9 +114,22 @@ export namespace TaskApi {
 		return {
 			...taskApi,
 			condition,
-			truthy,
 			take,
 			stream,
 		};
 	}
+}
+
+export interface TaskScheduler<TState> {
+	(task: TaskFn<TState, void>): void;
+}
+export namespace TaskScheduler {
+	export const scoped =
+		<TStateA, TStateB>(
+			unscopedScheduler: TaskScheduler<TStateA>,
+			selector: (state: TStateA) => TStateB,
+		): TaskScheduler<TStateB> =>
+		(taksFn) => {
+			unscopedScheduler((taskApi) => taksFn(TaskApi.scoped(taskApi, selector)));
+		};
 }
