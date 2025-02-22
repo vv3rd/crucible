@@ -120,12 +120,12 @@ const defaultExecutor: Executor = (funcs, param) => {
 	if (param instanceof Function) {
 		param = param();
 	}
-	const firstFunc = funcs[0];
-	if (firstFunc) {
+	if (0 in funcs) {
+		const firstFunc = funcs[0]!;
 		try {
-			var result = firstFunc(param);
+			var firstOut = firstFunc(param);
 		} catch (err) {
-			var error = err;
+			var firstErr = err;
 		}
 	}
 	const errors: unknown[] = [];
@@ -139,9 +139,9 @@ const defaultExecutor: Executor = (funcs, param) => {
 	for (const error of errors) {
 		onError(error);
 	}
-	if (error) {
-		throw error;
+	if (firstErr) {
+		throw firstErr;
 	} else {
-		return result;
+		return firstOut;
 	}
 };
