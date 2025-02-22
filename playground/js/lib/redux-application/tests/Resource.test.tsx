@@ -25,7 +25,7 @@ test("Resource", () => {
   ) => {
     return state;
   };
-  const reducer = Reducer.composed({
+  const reducer = Reducer.compose({
     cache: cacheR,
   });
 

@@ -1,4 +1,4 @@
-import { Message,  SomeMessage } from "./types";
+import { Message, SomeMessage } from "./types";
 import { TaskScheduler } from "./Task";
 import { Msg } from "./Message";
 import { createStore } from "zustand/vanilla";
@@ -43,7 +43,7 @@ export namespace Reducer {
 		return primitiveReducer;
 	}
 
-	export const composed = composeReducersImpl as <M extends Dict<AnyReducer>>(
+	export const compose = composeReducersImpl as <M extends Dict<AnyReducer>>(
 		reducersDict: M,
 	) => ReducerFromCombination<M>;
 

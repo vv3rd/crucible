@@ -45,15 +45,15 @@ export interface Subscription extends Disposable {
 	(): void;
 }
 
-export interface ListenerCallback<TMsg extends Message> {
-	(message: TMsg): void;
+export interface ListenerCallback {
+	(): void;
 }
 
 export interface Store<TState, TMsg extends Message> {
 	dispatch: Dispatch<TMsg, TState>;
 	getState(): TState;
-	subscribe(listener: ListenerCallback<TMsg>): Subscription;
-	unsubscribe(listener: ListenerCallback<TMsg>): void;
+	subscribe(listener: ListenerCallback): Subscription;
+	unsubscribe(listener: ListenerCallback): void;
 }
 
 export interface Dispatch<TMsg extends Message, TState> {

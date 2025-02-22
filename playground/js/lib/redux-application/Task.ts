@@ -15,6 +15,7 @@ export namespace TaskScheduler {
 		};
 }
 
+export type AnyTaskFn<R = any> = TaskFn<any, any, R>;
 export interface TaskFn<
 	TState,
 	TMsg extends Message = Message,
@@ -55,6 +56,8 @@ export namespace TaskFn {
 			},
 		};
 	};
+	export type InferMsg<R> = R extends TaskFn<any, infer A, any> ? A : never;
+	export type InferState<R> = R extends TaskFn<infer S, any, any> ? S : never;
 }
 
 export interface TaskApi<TState, TMsg extends Message = Message> {

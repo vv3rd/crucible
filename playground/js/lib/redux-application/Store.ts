@@ -1,6 +1,6 @@
 import { Message, Store, ListenerCallback } from "./types";
 import { Reducer } from "./Reducer";
-import { TaskFn, TaskApi, TasksPool } from "./Task";
+import { AnyTaskFn, TaskFn } from "./Task";
 import { identity } from "../toolkit";
 import {
 	ERR_FINAL_USED_BEFORE_CREATED,
@@ -23,10 +23,6 @@ export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	overlay: StoreOverlay<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
-	const effects: Effects<TState, TMsg> = {
-		executeTasks: defaultExecuteTasks(),
-		notifyListeners: defaultNotifyListeners(),
-	};
 	let delegateGetFinal = (): typeof store => {
 		try {
 			return store;
@@ -37,58 +33,44 @@ export function createStore<TState, TMsg extends Message>(
 	const getFinalStore = () => delegateGetFinal();
 	const store: Store<TState, TMsg> = overlay(createStoreIml)(
 		reducer,
-		effects,
+		undefined,
 		getFinalStore,
 	);
 	delegateGetFinal = () => store;
 	return store;
 }
 
+// declare const testTask: TaskFn<any, any, { foo: "test" }>;
+
 export function createStoreIml<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
-	effects: Effects<TState, TMsg>,
+	effects: any,
 	getFinalStore: () => Store<TState, TMsg>,
 ): Store<TState, TMsg> {
-	const { executeTasks, notifyListeners } = effects;
-
-	const listeners: Set<ListenerCallback<TMsg>> = new Set();
+	const listeners: Set<ListenerCallback> = new Set();
 
 	let state: TState = Reducer.initialize(reducer);
 
-	let store: Store<TState, TMsg>;
-	const activeStore: Store<TState, TMsg> = (store = {
-		dispatch(msgOrTask: TMsg | TaskFn<TState, TMsg, any>) {
-			const ab = new AbortController();
-			const taskApi = TaskApi.fromStore(getFinalStore(), ab.signal);
-			if (msgOrTask instanceof Function) {
-				const task = msgOrTask;
-				// TODO: need to handle task aborts in executeTasks too
-				try {
-					const result = task(taskApi);
-					if (result instanceof Promise) {
-						result.finally(() => ab.abort());
-					}
-					return result;
-				} finally {
-					ab.abort();
-				}
+	let delegate: Store<TState, TMsg>;
+	const activeStore: Store<TState, TMsg> = (delegate = {
+		dispatch(msgLike: TMsg | TaskFn<TState, TMsg, any>) {
+			if (typeof msgLike === "function") {
+				return execute([msgLike], getFinalStore());
 			}
-			const message = msgOrTask;
 			const tpb = TaskFn.pool<TState, TMsg, void>();
 			try {
-				store = lockedStore;
-				state = reducer(state, message, tpb.getScheduler());
+				delegate = lockedStore;
+				state = reducer(state, msgLike, tpb.getScheduler());
 			} finally {
+				delegate = activeStore;
 				tpb.lockScheduler();
-				store = activeStore;
 			}
-			executeTasks(tpb.getTasks(), taskApi);
-			notifyListeners([...listeners], message);
+			execute([...tpb.getTasks(), ...listeners], getFinalStore());
 		},
 
-		subscribe(listener: ListenerCallback<TMsg>) {
+		subscribe(listener: ListenerCallback) {
 			listeners.add(listener);
-			const unsubscribe = () => store.unsubscribe(listener);
+			const unsubscribe = () => delegate.unsubscribe(listener);
 			unsubscribe.unsubscribe = unsubscribe;
 			unsubscribe[Symbol.dispose] = unsubscribe;
 			return unsubscribe;
@@ -105,71 +87,27 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 	// biome-ignore format: looks funky
 	return {
-		dispatch:    (action: any) => store.dispatch (action    ),
-		getState:    (           ) => store.getState (          ),
-		subscribe:   (callback   ) => store.subscribe(callback  ),
-		unsubscribe: (callback   ) => store.unsubscribe(callback)
+		dispatch:    (action: any) => delegate.dispatch (action    ),
+		getState:    (           ) => delegate.getState (          ),
+		subscribe:   (callback   ) => delegate.subscribe(callback  ),
+		unsubscribe: (callback   ) => delegate.unsubscribe(callback)
 	};
 }
 
+// biome-ignore format: looks funky
 const lockedStore: Store<any, any> = {
-	dispatch() {
-		throw new Error(ERR_LOCKED_DISPATCH);
-	},
-	getState() {
-		throw new Error(ERR_LOCKED_GETSTATE);
-	},
-	subscribe() {
-		throw new Error(ERR_LOCKED_SUBSCRIBE);
-	},
-	unsubscribe() {
-		throw new Error(ERR_LOCKED_UNSUBSCRIBE);
-	},
+	dispatch()    { throw new Error(ERR_LOCKED_DISPATCH);    },
+	getState()    { throw new Error(ERR_LOCKED_GETSTATE);    },
+	subscribe()   { throw new Error(ERR_LOCKED_SUBSCRIBE);   },
+	unsubscribe() { throw new Error(ERR_LOCKED_UNSUBSCRIBE); },
 };
 
-interface Effects<TState, TMsg extends Message> {
-	notifyListeners: NotifyListeners<TMsg>;
-	executeTasks: ExecuteTasks<TState, TMsg>;
-}
-
-const defaultErrorHandler = console.error;
-
-type ErrorHandlingConfig = {
-	onError?: (error: unknown) => void;
+const execute = <Ts extends AnyTaskFn[]>(
+	tasks: Ts,
+	store: Store<TaskFn.InferState<Ts[number]>, TaskFn.InferMsg<Ts[number]>>,
+): ReturnType<Ts[0]> => {
+	throw new Error("todo");
 };
-
-type NotifyListeners<TMsg extends Message> = ReturnType<
-	typeof defaultNotifyListeners<TMsg>
->;
-export function defaultNotifyListeners<TMsg extends Message>({
-	onError = defaultErrorHandler,
-}: ErrorHandlingConfig = {}) {
-	const notifyListeners = (
-		listeners: readonly ListenerCallback<TMsg>[],
-		message: TMsg,
-	) => {
-		runUninterupted(listeners, message, onError);
-	};
-
-	return notifyListeners;
-}
-
-type ExecuteTasks<TState, TMsg extends Message> = ReturnType<
-	typeof defaultExecuteTasks<TState, TMsg>
->;
-export function defaultExecuteTasks<TState, TMsg extends Message>({
-	onError = defaultErrorHandler,
-}: ErrorHandlingConfig = {}) {
-	type TTaskFn = TaskFn<TState, TMsg, void>;
-	const executeTasks = (
-		tasks: readonly TTaskFn[],
-		taskApi: TaskApi<TState, TMsg>,
-	) => {
-		runUninterupted(tasks, taskApi, onError);
-	};
-
-	return executeTasks;
-}
 
 function runUninterupted<Arg, Func extends (arg: Arg) => void>(
 	callbacks: readonly Func[],
