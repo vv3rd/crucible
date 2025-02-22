@@ -23,30 +23,31 @@ export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	overlay: StoreOverlay<TState, TMsg> = identity,
 ): Store<TState, TMsg> {
-	let final = (): typeof store => {
+	const effects: Effects<TState, TMsg> = {
+		executeTasks: defaultExecuteTasks(),
+		notifyListeners: defaultNotifyListeners(),
+	};
+	let delegateGetFinal = (): typeof store => {
 		try {
 			return store;
 		} catch (error) {
 			throw new Error(ERR_FINAL_USED_BEFORE_CREATED, { cause: error });
 		}
 	};
-	const effects: Effects<TState, TMsg> = {
-		executeTasks: defaultExecuteTasks(),
-		notifyListeners: defaultNotifyListeners(),
-	};
+	const getFinalStore = () => delegateGetFinal();
 	const store: Store<TState, TMsg> = overlay(createStoreIml)(
 		reducer,
 		effects,
-		() => final(),
+		getFinalStore,
 	);
-	final = () => store;
+	delegateGetFinal = () => store;
 	return store;
 }
 
 export function createStoreIml<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	effects: Effects<TState, TMsg>,
-	final: () => Store<TState, TMsg>,
+	getFinalStore: () => Store<TState, TMsg>,
 ): Store<TState, TMsg> {
 	const { executeTasks, notifyListeners } = effects;
 
@@ -58,7 +59,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 	const activeStore: Store<TState, TMsg> = (store = {
 		dispatch(msgOrTask: TMsg | TaskFn<TState, TMsg, any>) {
 			const ab = new AbortController();
-			const taskApi = TaskApi.fromStore(final(), ab.signal);
+			const taskApi = TaskApi.fromStore(getFinalStore(), ab.signal);
 			if (msgOrTask instanceof Function) {
 				const task = msgOrTask;
 				// TODO: need to handle task aborts in executeTasks too
@@ -73,7 +74,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 				}
 			}
 			const message = msgOrTask;
-			const tpb = TasksPool.builder<TState, TMsg, void>();
+			const tpb = TaskFn.pool<TState, TMsg, void>();
 			try {
 				store = lockedStore;
 				state = reducer(state, message, tpb.getScheduler());
@@ -87,9 +88,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 
 		subscribe(listener: ListenerCallback<TMsg>) {
 			listeners.add(listener);
-			const unsubscribe = () => {
-				store.unsubscribe(listener);
-			};
+			const unsubscribe = () => store.unsubscribe(listener);
 			unsubscribe.unsubscribe = unsubscribe;
 			unsubscribe[Symbol.dispose] = unsubscribe;
 			return unsubscribe;

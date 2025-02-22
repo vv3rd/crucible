@@ -19,3 +19,4 @@ export type Lazy<TReturn> = () => TReturn;
 export type Is<T> = (thing: unknown) => thing is T;
 
 export type Narrow<From, To extends From> = (input: From) => input is To;
+

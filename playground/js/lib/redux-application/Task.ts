@@ -15,14 +15,34 @@ export namespace TaskScheduler {
 		};
 }
 
-export type TasksPool<TState, TMsg extends Message, TResult> = TaskFn<
+export interface TaskFn<
 	TState,
-	TMsg,
-	TResult
->;
+	TMsg extends Message = Message,
+	TResult = void,
+> {
+	(taskApi: TaskApi<TState, TMsg>): TResult;
+}
 
-export namespace TasksPool {
-	export const builder = <TState, TMsg extends Message, TResult = void>() => {
+export namespace TaskFn {
+	export function execute<R, S, M extends Message>(
+		task: TaskFn<S, M, R>,
+		store: Store<any, any>,
+	): R {
+		const ab = new AbortController();
+		const api = { ...TaskApi.fromStore(store), signal: ab.signal };
+		let result: R;
+		try {
+			result = task(api);
+		} finally {
+			ab.abort();
+		}
+		if (result instanceof Promise) {
+			result.finally(() => ab.abort());
+		}
+		return result;
+	}
+
+	export const pool = <TState, TMsg extends Message, TResult = void>() => {
 		const tasks: TaskFn<TState, TMsg, TResult>[] = [];
 		let scheduler = tasks.push.bind(tasks);
 		return {
@@ -35,14 +55,6 @@ export namespace TasksPool {
 			},
 		};
 	};
-}
-
-export interface TaskFn<
-	TState,
-	TMsg extends Message = Message,
-	TResult = void,
-> {
-	(taskApi: TaskApi<TState, TMsg>): TResult;
 }
 
 export interface TaskApi<TState, TMsg extends Message = Message> {
@@ -65,7 +77,7 @@ export namespace TaskApi {
 
 	export const fromStore = <TState, TMsg extends Message>(
 		store: Store<TState, TMsg>,
-		signal: AbortSignal,
+		signal = AbortSignal.abort(),
 	): TaskApi<TState, TMsg> => {
 		let nextMessage: Promise<TMsg> | undefined;
 		const getNextMessage = () => {

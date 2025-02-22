@@ -1,6 +1,8 @@
-import { Message, SomeMessage } from "./types";
+import { Message,  SomeMessage } from "./types";
 import { TaskScheduler } from "./Task";
 import { Msg } from "./Message";
+import { createStore } from "zustand/vanilla";
+import { Lazy } from "./Fn";
 
 export interface Reducer<TState, TMsg extends Message> {
 	(
@@ -87,4 +89,47 @@ function composeReducersImpl(reducersObject: Record<string, AnyReducer>) {
 		}
 		return next;
 	};
+}
+
+function appendReducers<S, M extends Message>(
+	first: Reducer<S, M>,
+	second: Reducer<S, M>,
+) {
+	const joined: Reducer<S, M> = (state, msg, exec) =>
+		second(first(state, msg, exec), msg, exec);
+	return joined;
+}
+
+createStore;
+
+type Setter<T> = {
+	(value: T | Partial<T>): T;
+	(update: (state: T) => T | Partial<T>): T;
+	replace(value: T): T;
+	replace(update: (state: T) => T): T;
+};
+
+const setterFor = <T>(current: T): Setter<T> => {
+	const setter = ((valueOrUpdate) => {
+		if (valueOrUpdate instanceof Function) {
+			valueOrUpdate = valueOrUpdate(current);
+		}
+		return { ...current, valueOrUpdate };
+	}) as Setter<T>;
+	setter.replace = setter;
+	return setter;
+};
+
+function buildReducer<
+	S,
+	R extends Record<string, /* not a reducer, a message handler*/ AnyReducer>,
+>(
+	getInitialState: () => S,
+	reducers: (
+		set: Setter<S>,
+		get: Lazy<S>,
+		exec: TaskScheduler<S, Reducer.InferMsg<R[keyof R]>>,
+	) => R,
+) {
+	const get = () => {};
 }
