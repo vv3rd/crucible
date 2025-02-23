@@ -1,6 +1,6 @@
 import { Message, Store, ListenerCallback } from "./types";
 import { Reducer } from "./Reducer";
-import { TaskApi, TaskFn } from "./Task";
+import { TaskTools, Task } from "./Task";
 import { identity } from "../toolkit";
 import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
 
@@ -44,7 +44,7 @@ export const createStore = <TState, TMsg extends Message>(
 	return store;
 };
 
-// declare const testTask: TaskFn<any, any, { foo: "test" }>;
+// declare const testTask: Task<any, any, { foo: "test" }>;
 
 const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 	type TState = Reducer.InferState<typeof reducer>;
@@ -55,18 +55,18 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 		storeAccessor: getFinalStore,
 	} = internals;
 	const listeners: Set<ListenerCallback<TMsg>> = new Set();
-	const getTaskApi = () => TaskApi.fromStore(getFinalStore());
+	const getTaskTools = () => TaskTools.fromStore(getFinalStore());
 
 	let state: TState = Reducer.initialize(reducer);
 
 	const activeStore: Store<TState, TMsg> = {
-		dispatch(msgOrTask: Message<any> | TaskFn<TState, any>) {
+		dispatch(msgOrTask: Message<any> | Task<TState, any>) {
 			if (typeof msgOrTask === "function") {
 				const task = msgOrTask;
-				return executeTasks([task], getTaskApi);
+				return executeTasks([task], getTaskTools);
 			}
 			const msg = msgOrTask as TMsg;
-			const tpb = TaskFn.pool<TState, void>();
+			const tpb = Task.pool<TState, void>();
 			try {
 				delegate = lockedStore;
 				state = reducer(state, msg, tpb.getScheduler());
@@ -75,7 +75,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 				tpb.lockScheduler();
 			}
 			executeTasks([...listeners], msg);
-			executeTasks(tpb.getTasks(), getTaskApi);
+			executeTasks(tpb.getTasks(), getTaskTools);
 		},
 
 		subscribe(listener) {

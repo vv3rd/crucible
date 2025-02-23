@@ -1,4 +1,4 @@
-import { TaskFn } from "./Task";
+import { Task } from "./Task";
 
 export type StateRoot = object & Record<string, any>;
 
@@ -59,7 +59,7 @@ export interface Store<TState, TMsg extends Message> {
 
 export interface Dispatch<TMsg extends Message, TState> {
 	(action: TMsg): void;
-	<TResult>(task: TaskFn<TState, TResult>): TResult;
+	<TResult>(task: Task<TState, TResult>): TResult;
 }
 
 // Utils

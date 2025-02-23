@@ -4,8 +4,8 @@ const { fromEntries, entries } = Object;
 export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 	options: Form.Options<TValues, TInitArg>,
 ) {
-	type ItsTaskApi = TaskAPI<TValues>;
-	// type ItsTaskFn = TaskFn<TValues>;
+	type ItsTaskTools = TaskAPI<TValues>;
+	// type ItsTask = Task<TValues>;
 	// type ItsFieldState = Form.FieldsState<TValues>;
 	// type ItsFormMsg = Form.Msg<TValues>;
 	type ItsFormState = Form.State<TValues>;
@@ -52,7 +52,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 					checkForm(collectValues(state.fields), msg),
 				);
 
-				const submitTask = async (api: ItsTaskApi) => {
+				const submitTask = async (api: ItsTaskTools) => {
 					const values = collectValues(api.getState().fields);
 					const submitReturn = submitForm(values, api);
 					if (submitReturn instanceof Promise) {
@@ -139,7 +139,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 		}
 
 		function wrapCheckTask(task: Form.CheckTask<TValues>) {
-			return async (api: ItsTaskApi) => {
+			return async (api: ItsTaskTools) => {
 				const output = task(api);
 				if (!(output instanceof Promise) && output) {
 					api.dispatch({ type: Form.MsgType.CheckDone, payload: output });
@@ -277,7 +277,7 @@ interface Note {
 	text: string;
 }
 
-type TaskFn<TValues extends Form.Values> = (
+type Task<TValues extends Form.Values> = (
 	taskApi: TaskAPI<TValues>,
 ) => util.MaybePromise<unknown>;
 type TaskAPI<TValues extends Form.Values> = {
@@ -350,7 +350,7 @@ export namespace Form {
 	}
 	export type CommonState<TValues extends Values> = Statuses & {
 		notes: NonNullable<CheckNotes<TValues>>;
-		task: undefined | TaskFn<TValues>;
+		task: undefined | Task<TValues>;
 	};
 	export type Fields<TValues extends Values> = {
 		reduceFields: Reducer<FieldsState<TValues>, Field.NamedMsg<TValues>>;

@@ -1,36 +1,21 @@
 import { FUCK_TASK_POOL_CLOSED } from "./Errors";
 import { Matchable, Message, SomeMessage, Store } from "./types";
 
-export type AnyTaskFn<R = any> = TaskFn<any, R>;
-export interface TaskFn<TState, TResult = void> {
-	(taskApi: TaskApi<TState>): TResult;
+export type AnyTask<R = any> = Task<any, R>;
+export interface Task<TState, TResult = void> {
+	(tools: TaskTools<TState>): TResult;
 }
 
-export interface TaskApi<TState> {
+export interface TaskTools<TState> {
 	signal: AbortSignal;
 	dispatch: (message: SomeMessage) => void;
 	getState: () => TState;
 	nextMessage: () => Promise<SomeMessage>;
 }
 
-export namespace TaskFn {
-	export function execute<R, S>(task: TaskFn<S, R>, store: Store<any, any>): R {
-		const ab = new AbortController();
-		const api = { ...TaskApi.fromStore(store), signal: ab.signal };
-		let result: R;
-		try {
-			result = task(api);
-		} finally {
-			ab.abort();
-		}
-		if (result instanceof Promise) {
-			result.finally(() => ab.abort());
-		}
-		return result;
-	}
-
+export namespace Task {
 	export const pool = <TState, TResult = void>() => {
-		const tasks: TaskFn<TState, TResult>[] = [];
+		const tasks: Task<TState, TResult>[] = [];
 		let scheduler = tasks.push.bind(tasks);
 		return {
 			getTasks: () => [...tasks],
@@ -42,24 +27,24 @@ export namespace TaskFn {
 			},
 		};
 	};
-	export type InferState<R> = R extends TaskFn<infer S, any> ? S : never;
+	export type InferState<R> = R extends Task<infer S, any> ? S : never;
 }
 
-export namespace TaskApi {
+export namespace TaskTools {
 	export const scoped = <TStateA, TStateB>(
-		taskApi: TaskApi<TStateA>,
+		tools: TaskTools<TStateA>,
 		seletor: (state: TStateA) => TStateB,
-	): TaskApi<TStateB> => {
+	): TaskTools<TStateB> => {
 		return {
-			...taskApi,
-			getState: () => seletor(taskApi.getState()),
+			...tools,
+			getState: () => seletor(tools.getState()),
 		};
 	};
 
 	export const fromStore = <TState>(
 		store: Store<TState, any>,
 		signal = AbortSignal.abort(),
-	): TaskApi<TState> => {
+	): TaskTools<TState> => {
 		let nextMessage: Promise<SomeMessage> | undefined;
 		// biome-ignore format:
 		const getNextMessage = () => nextMessage ?? (nextMessage = new Promise<SomeMessage>((resolve) => {
@@ -77,17 +62,17 @@ export namespace TaskApi {
 		};
 	};
 
-	export function helper<T>(taskApi: TaskApi<T>) {
+	export function helper<T>(tools: TaskTools<T>) {
 		async function condition(checker: (state: T) => boolean): Promise<T>;
 
 		async function condition<U extends T>(
 			checker: (state: T) => state is U,
 		): Promise<U>;
 		async function condition(checker: (state: T) => boolean): Promise<T> {
-			let state = taskApi.getState();
+			let state = tools.getState();
 			while (!checker(state)) {
-				await taskApi.nextMessage();
-				state = taskApi.getState();
+				await tools.nextMessage();
+				state = tools.getState();
 			}
 			return state;
 		}
@@ -95,7 +80,7 @@ export namespace TaskApi {
 		async function take<T extends Message>(matcher: Matchable<T>): Promise<T> {
 			let awaitedMessage: T | undefined;
 			while (awaitedMessage === undefined) {
-				const msg = await taskApi.nextMessage();
+				const msg = await tools.nextMessage();
 				if (matcher.match(msg)) {
 					awaitedMessage = msg;
 				}
@@ -104,11 +89,11 @@ export namespace TaskApi {
 		}
 
 		async function* stream(): AsyncGenerator<Message, void, void> {
-			while (true) yield await taskApi.nextMessage();
+			while (true) yield await tools.nextMessage();
 		}
 
 		return {
-			...taskApi,
+			...tools,
 			condition,
 			take,
 			stream,
@@ -117,7 +102,7 @@ export namespace TaskApi {
 }
 
 export interface TaskScheduler<TState> {
-	(task: TaskFn<TState, void>): void;
+	(task: Task<TState, void>): void;
 }
 export namespace TaskScheduler {
 	export const scoped =
@@ -126,6 +111,6 @@ export namespace TaskScheduler {
 			selector: (state: TStateA) => TStateB,
 		): TaskScheduler<TStateB> =>
 		(taksFn) => {
-			unscopedScheduler((taskApi) => taksFn(TaskApi.scoped(taskApi, selector)));
+			unscopedScheduler((tools) => taksFn(TaskTools.scoped(tools, selector)));
 		};
 }

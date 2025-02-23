@@ -1,12 +1,12 @@
 import { FUCK_TASK_NOT_REAL } from "./Errors";
 import { Msg } from "./Message";
 import { Reducer } from "./Reducer";
-import { TaskApi, TaskFn } from "./Task";
+import { TaskTools, Task } from "./Task";
 import { Message, StateRoot } from "./types";
 
 const probeKey = Symbol();
 // type WireProbe = ReturnType<typeof WireProbeMsg>;
-type ProbeTask = <S>(wireId: string) => (api: TaskApi<S>) => void;
+type ProbeTask = <S>(wireId: string) => (api: TaskTools<S>) => void;
 
 const WireProbeMsg = Msg.ofType("@wiring/probe").withPayload(
 	(task: ProbeTask) => ({ [probeKey]: task }),
@@ -40,20 +40,20 @@ export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
 	const probeMsg = WireProbeMsg((wireId) => (api) => {
 		wireMeta[wireId] = createWireSelector(api.getState);
 	});
-	const tpb = TaskFn.pool<WiringRoot, any>();
+	const tpb = Task.pool<WiringRoot, any>();
 	try {
 		reducer(undefined, probeMsg, tpb.getScheduler());
 	} finally {
 		tpb.lockScheduler();
 	}
 	for (const task of tpb.getTasks()) {
-		task({ ...stubTaskApi, getState: () => stateGetter() });
+		task({ ...stubTaskTools, getState: () => stateGetter() });
 	}
 
 	let stateGetter = function lockedStateGetter(): WiringRoot {
 		throw new Error(
 			"This should not happen unless you doing something " +
-				"very wrong with scoping TaskScheduler-s or TaskApi-s",
+				"very wrong with scoping TaskScheduler-s or TaskTools-s",
 		);
 	};
 
@@ -84,7 +84,7 @@ export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
 	return wiringRootReducer;
 }
 
-const stubTaskApi: TaskApi<any> = {
+const stubTaskTools: TaskTools<any> = {
 	signal: AbortSignal.abort(),
 	dispatch() {
 		throw new Error(FUCK_TASK_NOT_REAL);
