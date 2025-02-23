@@ -4,19 +4,27 @@ import { TaskApi, TaskFn } from "./Task";
 import { identity } from "../toolkit";
 import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
 
-type WrappableStoreCreator<
-	TState,
-	TMsg extends Message,
-> = typeof createStoreIml<TState, TMsg>;
+type StoreOverlay = (creator: InnerStoreCreator) => InnerStoreCreator;
 
-type StoreOverlay<TState, TMsg extends Message> = (
-	creator: WrappableStoreCreator<TState, TMsg>,
-) => WrappableStoreCreator<TState, TMsg>;
-
-export function createStore<TState, TMsg extends Message>(
+type InnerStoreCreator = <TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
-	overlay: StoreOverlay<TState, TMsg> = identity,
-): Store<TState, TMsg> {
+	internals: Internals<TState, TMsg>,
+) => Store<TState, TMsg>;
+
+type Internals<TState, TMsg extends Message> = {
+	tasksExecutor: Executor;
+	storeAccessor: () => Store<TState, TMsg>;
+};
+
+type Executor = <A, Fs extends Array<(arg: A) => any>>(
+	funcs: Fs,
+	param: A | (() => A),
+) => ReturnType<Fs[0]>;
+
+export const createStore = <TState, TMsg extends Message>(
+	reducer: Reducer<TState, TMsg>,
+	overlay: StoreOverlay = identity,
+): Store<TState, TMsg> => {
 	let storeAccessor = (): typeof store => {
 		try {
 			return store;
@@ -27,21 +35,20 @@ export function createStore<TState, TMsg extends Message>(
 	let tasksExecutor: Executor = () => {
 		throw new Error(FUCK_INTERNALS_USED);
 	};
-	const store: Store<TState, TMsg> = overlay(createStoreIml)(reducer, {
+	const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, {
 		storeAccessor: () => storeAccessor(),
 		tasksExecutor: (f, p) => tasksExecutor(f, p),
 	});
 	storeAccessor = () => store;
 	tasksExecutor = defaultExecutor;
 	return store;
-}
+};
 
 // declare const testTask: TaskFn<any, any, { foo: "test" }>;
 
-export function createStoreIml<TState, TMsg extends Message>(
-	reducer: Reducer<TState, TMsg>,
-	internals: Internals<TState, TMsg>,
-): Store<TState, TMsg> {
+const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
+	type TState = Reducer.InferState<typeof reducer>;
+	type TMsg = Reducer.InferMsg<typeof reducer>;
 	const {
 		//
 		tasksExecutor: executeTasks,
@@ -95,7 +102,7 @@ export function createStoreIml<TState, TMsg extends Message>(
 		subscribe:   (callback) => delegate.subscribe(callback),
 		unsubscribe: (callback) => delegate.unsubscribe(callback),
 	};
-}
+};
 
 // biome-ignore format: saves space
 const lockedStore: Store<any, any> = {
@@ -104,16 +111,6 @@ const lockedStore: Store<any, any> = {
 	subscribe() { throw new Error(FUCK_STORE_LOCKED); },
 	unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },
 };
-
-type Internals<TState, TMsg extends Message> = {
-	tasksExecutor: Executor;
-	storeAccessor: () => Store<TState, TMsg>;
-};
-
-type Executor = <A, Fs extends Array<(arg: A) => any>>(
-	funcs: Fs,
-	param: A | (() => A),
-) => ReturnType<Fs[0]>;
 
 const defaultExecutor: Executor = (funcs, param) => {
 	const onError = console.error;

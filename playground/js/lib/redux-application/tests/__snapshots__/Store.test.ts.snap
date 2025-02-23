@@ -1,0 +1,13 @@
+// Bun Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`just stuff in general 1`] = `
+{
+  "count": 0,
+}
+`;
+
+exports[`just stuff in general 2`] = `
+{
+  "count": 10,
+}
+`;

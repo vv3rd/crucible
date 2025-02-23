@@ -52,15 +52,14 @@ export interface ListenerCallback<TMsg> {
 
 export interface Store<TState, TMsg extends Message> {
 	dispatch: Dispatch<TMsg | SomeMessage, TState>;
-	getState(): TState;
-	subscribe(listener: ListenerCallback<TMsg>): Subscription;
-	unsubscribe(listener: ListenerCallback<TMsg>): void;
+	getState: () => TState;
+	subscribe: (listener: ListenerCallback<TMsg>) => Subscription;
+	unsubscribe: (listener: ListenerCallback<TMsg>) => void;
 }
 
 export interface Dispatch<TMsg extends Message, TState> {
 	(action: TMsg): void;
 	<TResult>(task: TaskFn<TState, TResult>): TResult;
-	<TResult>(actionOrTask: TMsg | TaskFn<TState, TResult>): void | TResult;
 }
 
 // Utils

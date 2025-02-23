@@ -61,18 +61,14 @@ export namespace TaskApi {
 		signal = AbortSignal.abort(),
 	): TaskApi<TState> => {
 		let nextMessage: Promise<SomeMessage> | undefined;
-		const getNextMessage = () => {
-			if (!nextMessage) {
-				nextMessage = new Promise((resolve) => {
-					const unsubscribe = store.subscribe((message) => {
-						nextMessage = undefined;
-						unsubscribe();
-						resolve(message);
-					});
-				});
-			}
-			return nextMessage;
-		};
+		// biome-ignore format:
+		const getNextMessage = () => nextMessage ?? (nextMessage = new Promise<SomeMessage>((resolve) => {
+			const unsubscribe = store.subscribe((message) => {
+				nextMessage = undefined
+				unsubscribe();
+				resolve(message);
+			});
+		}));
 		return {
 			signal,
 			getState: store.getState,
