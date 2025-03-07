@@ -15,6 +15,7 @@ export type Fn3<P1, P2, P3, TReturn = void> = (
 
 export type VoidFn = () => void;
 export type Lazy<TReturn> = () => TReturn;
+export type Lazish<T> = T | Lazy<T>
 
 export type Is<T> = (thing: unknown) => thing is T;
 

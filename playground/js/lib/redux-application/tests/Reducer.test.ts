@@ -10,6 +10,5 @@ describe("Reducer.composed", () => {
 	});
 
 	it.todo("todo", () => {
-		const kekounter = Reducer.primitive(0, "kek/update");
 	});
 });
