@@ -1,12 +1,12 @@
 import { FUCK_TASK_NOT_REAL } from "./Errors";
 import { Msg } from "./Message";
 import { Reducer } from "./Reducer";
-import { TaskTools, Task } from "./Task";
+import { TaskControls, Task } from "./Task";
 import { Message, StateRoot } from "./types";
 
 const probeKey = Symbol();
 // type WireProbe = ReturnType<typeof WireProbeMsg>;
-type ProbeTask = <S>(wireId: string) => (api: TaskTools<S>) => void;
+type ProbeTask = <S>(wireId: string) => (api: TaskControls<S>) => void;
 
 const WireProbeMsg = Msg.ofType("@wiring/probe").withPayload(
 	(task: ProbeTask) => ({ [probeKey]: task }),
@@ -47,13 +47,13 @@ export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
 		tpb.lockScheduler();
 	}
 	for (const task of tpb.getTasks()) {
-		task({ ...stubTaskTools, getState: () => stateGetter() });
+		task({ ...stubTaskControls, getState: () => stateGetter() });
 	}
 
 	let stateGetter = function lockedStateGetter(): WiringRoot {
 		throw new Error(
 			"This should not happen unless you doing something " +
-				"very wrong with scoping TaskScheduler-s or TaskTools-s",
+				"very wrong with scoping TaskScheduler-s or TaskControls-s",
 		);
 	};
 
@@ -84,15 +84,13 @@ export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {
 	return wiringRootReducer;
 }
 
-const stubTaskTools: TaskTools<any> = {
-	signal: AbortSignal.abort(),
-	dispatch() {
-		throw new Error(FUCK_TASK_NOT_REAL);
-	},
-	nextMessage() {
-		throw new Error(FUCK_TASK_NOT_REAL);
-	},
-	getState() {
-		throw new Error(FUCK_TASK_NOT_REAL);
-	},
+// biome-ignore format:
+const stubTaskControls: TaskControls<any> = {
+    signal: AbortSignal.abort(),
+    lastMessage: Msg.empty,
+    dispatch() { throw new Error(FUCK_TASK_NOT_REAL); },
+    nextMessage() { throw new Error(FUCK_TASK_NOT_REAL); },
+    getState() { throw new Error(FUCK_TASK_NOT_REAL); },
+    subscribe() { throw new Error(FUCK_TASK_NOT_REAL); },
+    unsubscribe() { throw new Error(FUCK_TASK_NOT_REAL); }
 };

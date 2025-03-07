@@ -55,6 +55,8 @@ export namespace Msg {
 			builders,
 		);
 	}
+
+	export const empty = () => ({ type: "" });
 }
 
 export namespace MsgGroup {

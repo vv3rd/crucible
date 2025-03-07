@@ -1,8 +1,33 @@
-import { Message, Store, ListenerCallback } from "./types";
+import { Message, AnyMessage } from "./types";
 import { Reducer } from "./Reducer";
-import { TaskTools, Task } from "./Task";
+import { Task } from "./Task";
 import { identity } from "../toolkit";
 import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
+import { Msg } from "./Message.ts";
+import { AnyFn, Lazy } from "./Fn.ts";
+
+export interface Subscription {
+	// extends Disposable {
+	// unsubscribe(): void;
+	(): void;
+}
+
+export interface ListenerCallback {
+	(notifier: { lastMessage: () => AnyMessage }): void;
+}
+
+export interface Store<TState, TMsg extends Message> {
+	dispatch: Dispatch<TMsg>;
+	getState: () => TState;
+	subscribe: (listener: ListenerCallback) => Subscription;
+	unsubscribe: (listener: AnyFn) => void;
+	nextMessage: () => Promise<AnyMessage>;
+	lastMessage: () => AnyMessage;
+}
+
+export interface Dispatch<TMsg> {
+	(action: TMsg): void;
+}
 
 type StoreOverlay = (creator: InnerStoreCreator) => InnerStoreCreator;
 
@@ -12,14 +37,14 @@ type InnerStoreCreator = <TState, TMsg extends Message>(
 ) => Store<TState, TMsg>;
 
 type Internals<TState, TMsg extends Message> = {
-	tasksExecutor: Executor;
+	tasksExecutor: Executor<TState, TMsg>;
 	storeAccessor: () => Store<TState, TMsg>;
 };
 
-type Executor = <A, Fs extends Array<(arg: A) => any>>(
-	funcs: Fs,
-	param: A | (() => A),
-) => ReturnType<Fs[0]>;
+type Executor<TState, TMsg extends Message> = (
+	tasks: Array<Task<TState, void>>,
+	store: Lazy<Store<TState, TMsg>>,
+) => void;
 
 export const createStore = <TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
@@ -32,19 +57,13 @@ export const createStore = <TState, TMsg extends Message>(
 			throw new Error(FUCK_INTERNALS_USED, { cause: error });
 		}
 	};
-	let tasksExecutor: Executor = () => {
-		throw new Error(FUCK_INTERNALS_USED);
-	};
 	const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, {
 		storeAccessor: () => storeAccessor(),
-		tasksExecutor: (f, p) => tasksExecutor(f, p),
+		tasksExecutor: defaultExecutor,
 	});
 	storeAccessor = () => store;
-	tasksExecutor = defaultExecutor;
 	return store;
 };
-
-// declare const testTask: Task<any, any, { foo: "test" }>;
 
 const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 	type TState = Reducer.InferState<typeof reducer>;
@@ -54,18 +73,12 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 		tasksExecutor: executeTasks,
 		storeAccessor: getFinalStore,
 	} = internals;
-	const listeners: Set<ListenerCallback<TMsg>> = new Set();
-	const getTaskTools = () => TaskTools.fromStore(getFinalStore());
+	const listeners: Set<ListenerCallback> = new Set();
 
 	let state: TState = Reducer.initialize(reducer);
 
 	const activeStore: Store<TState, TMsg> = {
-		dispatch(msgOrTask: Message<any> | Task<TState, any>) {
-			if (typeof msgOrTask === "function") {
-				const task = msgOrTask;
-				return executeTasks([task], getTaskTools);
-			}
-			const msg = msgOrTask as TMsg;
+		dispatch(msg) {
 			const tpb = Task.pool<TState, void>();
 			try {
 				delegate = lockedStore;
@@ -74,8 +87,9 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 				delegate = activeStore;
 				tpb.lockScheduler();
 			}
-			executeTasks([...listeners], msg);
-			executeTasks(tpb.getTasks(), getTaskTools);
+			lastMsg = msg;
+			executeTasks([...listeners], getFinalStore);
+			executeTasks(tpb.getTasks(), getFinalStore);
 		},
 
 		subscribe(listener) {
@@ -83,62 +97,65 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 			const unsubscribe = () => delegate.unsubscribe(listener);
 			return unsubscribe;
 		},
-
 		unsubscribe(listener) {
 			listeners.delete(listener);
 		},
-
 		getState() {
 			return state;
 		},
+		lastMessage() {
+			return lastMsg;
+		},
+		nextMessage() {
+			return nextMsg ?? (nextMsg = new Promise(setupPromise));
+		},
+	};
+
+	let lastMsg = Msg.empty();
+	let nextMsg: Promise<AnyMessage> | undefined;
+	const setupPromise = (resolve: (msg: AnyMessage) => void) => {
+		const unsubscribe = delegate.subscribe(({ lastMessage }) => {
+			nextMsg = undefined;
+			unsubscribe();
+			resolve(lastMessage());
+		});
 	};
 
 	let delegate: Store<TState, TMsg> = activeStore;
 
 	// biome-ignore format: better visual
 	return {
-		dispatch: (action: any) => delegate.dispatch(action),
-		getState:            () => delegate.getState(),
-		subscribe:   (callback) => delegate.subscribe(callback),
-		unsubscribe: (callback) => delegate.unsubscribe(callback),
+		dispatch:    (...a) => delegate.dispatch(...a),
+		getState:        () => delegate.getState(),
+		subscribe:   (...a) => delegate.subscribe(...a),
+		unsubscribe: (...a) => delegate.unsubscribe(...a),
+		lastMessage:     () => delegate.lastMessage(),
+		nextMessage:     () => delegate.nextMessage(),
 	};
 };
 
 // biome-ignore format: saves space
 const lockedStore: Store<any, any> = {
-	dispatch() { throw new Error(FUCK_STORE_LOCKED); },
-	getState() { throw new Error(FUCK_STORE_LOCKED); },
-	subscribe() { throw new Error(FUCK_STORE_LOCKED); },
-	unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },
+    dispatch() { throw new Error(FUCK_STORE_LOCKED); },
+    getState() { throw new Error(FUCK_STORE_LOCKED); },
+    subscribe() { throw new Error(FUCK_STORE_LOCKED); },
+    unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },
+    nextMessage() { throw new Error(FUCK_STORE_LOCKED); },
+    lastMessage() { throw new Error(FUCK_STORE_LOCKED); }
 };
 
-const defaultExecutor: Executor = (funcs, param) => {
+const defaultExecutor: Executor<any, any> = (tasks, getStore) => {
 	const onError = console.error;
-	if (param instanceof Function) {
-		param = param();
-	}
-	if (0 in funcs) {
-		const firstFunc = funcs[0]!;
-		try {
-			var firstOut = firstFunc(param);
-		} catch (err) {
-			var firstErr = err;
-		}
-	}
 	const errors: unknown[] = [];
-	for (const func of funcs) {
+	const store = getStore();
+	for (const func of tasks) {
 		try {
-			func(param);
+			Task.run(func, store);
 		} catch (err) {
 			errors.push(err);
 		}
 	}
 	for (const error of errors) {
 		onError(error);
-	}
-	if (firstErr) {
-		throw firstErr;
-	} else {
-		return firstOut;
 	}
 };

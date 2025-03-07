@@ -4,7 +4,7 @@ const { fromEntries, entries } = Object;
 export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 	options: Form.Options<TValues, TInitArg>,
 ) {
-	type ItsTaskTools = TaskAPI<TValues>;
+	type ItsTaskControls = TaskAPI<TValues>;
 	// type ItsTask = Task<TValues>;
 	// type ItsFieldState = Form.FieldsState<TValues>;
 	// type ItsFormMsg = Form.Msg<TValues>;
@@ -52,7 +52,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 					checkForm(collectValues(state.fields), msg),
 				);
 
-				const submitTask = async (api: ItsTaskTools) => {
+				const submitTask = async (api: ItsTaskControls) => {
 					const values = collectValues(api.getState().fields);
 					const submitReturn = submitForm(values, api);
 					if (submitReturn instanceof Promise) {
@@ -139,7 +139,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 		}
 
 		function wrapCheckTask(task: Form.CheckTask<TValues>) {
-			return async (api: ItsTaskTools) => {
+			return async (api: ItsTaskControls) => {
 				const output = task(api);
 				if (!(output instanceof Promise) && output) {
 					api.dispatch({ type: Form.MsgType.CheckDone, payload: output });

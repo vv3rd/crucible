@@ -1,4 +1,4 @@
-import { Task } from "./Task";
+import { AnyFn } from "./Fn";
 
 export type StateRoot = object & Record<string, any>;
 
@@ -28,9 +28,7 @@ export interface MessageWith<P, T extends Message.Type = Message.Type>
 	payload: P;
 }
 
-export interface SomeMessage extends Message {
-	[extraProps: string]: unknown;
-}
+export interface AnyMessage extends Message<any> {}
 
 export interface MessageFactory<
 	A extends Message = Message,
@@ -38,28 +36,6 @@ export interface MessageFactory<
 > extends Matchable<A> {
 	(...inputs: I): A;
 	type: A["type"];
-}
-
-export interface Subscription {
-	// extends Disposable {
-	// unsubscribe(): void;
-	(): void;
-}
-
-export interface ListenerCallback<TMsg> {
-	(message: TMsg): void;
-}
-
-export interface Store<TState, TMsg extends Message> {
-	dispatch: Dispatch<TMsg | SomeMessage, TState>;
-	getState: () => TState;
-	subscribe: (listener: ListenerCallback<TMsg>) => Subscription;
-	unsubscribe: (listener: ListenerCallback<TMsg>) => void;
-}
-
-export interface Dispatch<TMsg extends Message, TState> {
-	(action: TMsg): void;
-	<TResult>(task: Task<TState, TResult>): TResult;
 }
 
 // Utils

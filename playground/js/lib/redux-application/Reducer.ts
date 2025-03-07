@@ -1,4 +1,4 @@
-import { Message, SomeMessage } from "./types";
+import { Message, AnyMessage } from "./types";
 import { TaskScheduler } from "./Task";
 import { Msg } from "./Message";
 
@@ -50,7 +50,7 @@ export namespace Reducer {
 		var_State = { [P in keyof M]: InferState<M[P]> },
 		var_Msg extends Message = InferMsg<M[keyof M]>,
 	> = keyof M extends never
-		? Reducer<{}, SomeMessage>
+		? Reducer<{}, AnyMessage>
 		: Reducer<var_State, var_Msg>;
 
 	export type InferMsg<R> = R extends Reducer<any, infer A> ? A : never;
