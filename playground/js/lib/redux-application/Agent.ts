@@ -65,38 +65,6 @@ export namespace Agent {
 		};
 	}
 
-	// TODO: type in overloads
-	export function injection<T>(
-		name: string, // FIXME: injection should not require a name, it defeats the point
-		properties: { optional?: boolean } = {},
-	) {
-		const { optional = false } = properties;
-		const sources: Sources = [];
-		const select = memoLast(
-			(containerState: AgentContainer<T>): AgentOutput<T> => ({
-				value: containerState.value,
-				sources,
-			}),
-		);
-		const fallback: AgentOutput<undefined> = {
-			value: undefined,
-			sources,
-		};
-		return {
-			select(globalState: StateRoot) {
-				const container = globalState["agents"][name];
-				if (container) {
-					return select(container);
-				}
-				if (optional) {
-					return fallback;
-				} else {
-					throw new Error("Non optional injection requires requires an agent");
-				}
-			},
-		};
-	}
-
 	export function constant<T>(value: T): ReadonlyAgent<T> {
 		const result: AgentOutput<T> = { value, sources: [] };
 		return {
