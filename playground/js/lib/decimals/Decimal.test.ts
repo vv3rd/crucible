@@ -35,17 +35,17 @@ describe("minus", () => {
 		associative: false,
 		withZeros: [
 			["0 & 0", 0, 0, 0],
-			["0 & int", 0, 5, 5],
-			["0 & float", 0, 5.5, 5.5],
+			["0 & int", 0, 5, -5],
+			["0 & float", 0, 5.5, -5.5],
 
 			["-0 & -0", -0, -0, -0],
-			["-0 & int", -0, 5, 5],
-			["-0 & float", -0, 5.5, 5.5],
+			["-0 & int", -0, 5, -5],
+			["-0 & float", -0, 5.5, -5.5],
 		],
 		powerDiff: [
-			["int & int", 3, 3, 6],
-			["float & float", 3.1, 3.1, 6.2],
-			["float2 & float", 3.01, 3.1, 6.11],
+			["int & int", 4, 3, 1],
+			["float & float", 12.1, 3.2, 8.9],
+			["float2 & float", 21.01, 3.1, 6.11],
 			["int & float", 3, 3.1, 6.1],
 			["float & -int", 3.4, -3, 0.4],
 		],
@@ -80,9 +80,9 @@ describe.only("scaling", () => {
 	test("scales down to 0", () => {
 		expect(Decimal.scaleDown({ int: 2500n, pow: 2 })).toEqual(Decimal(25));
 	});
-	test('does not scale more', () => {
+	test("does not scale more", () => {
 		expect(Decimal.scaleDown({ int: 250n, pow: 3 })).toEqual(Decimal(0.25));
-	})
+	});
 });
 
 function testCases(
@@ -132,6 +132,6 @@ function testCalc(
 ) {
 	test(desc, () => {
 		const calcResult = calc(left, op, right);
-		return expect(Decimal.format(calcResult)).toEqual(String(out));
+		return expect(Decimal.format(calcResult)).toEqual(out.toString());
 	});
 }

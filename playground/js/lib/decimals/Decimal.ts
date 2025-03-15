@@ -1,38 +1,38 @@
-type MAX_OPERANDS = 2;
-
-type Literal = Decimal | number;
-type Op = Operator | OperatorKey;
-
-type CalcExpression<
+type MaxOperations = 10;
+// biome-ignore format:
+type CalcOverloads<
+	TResult,
+	TObject,
+	TOperator,
 	TOverloads extends (...equation: any[]) => any = (
-		...args: [arg: Literal, operator: Op, arg: Literal]
-	) => Decimal,
+		...args: [left: TObject, operator: TOperator, right: TObject]
+	) => TResult,
 	I extends ReadonlyArray<number> = [],
-> = I["length"] extends MAX_OPERANDS
+> = I["length"] extends MaxOperations
 	? TOverloads
-	: CalcExpression<
-			TOverloads &
-				((
-					...args: [...Parameters<TOverloads>, ...[operator: Op, arg: Literal]]
-				) => Decimal),
-			[...I, 1]
-		>;
+	: CalcOverloads<TResult, TObject, TOperator, TOverloads & {
+		(...args: [ ...Parameters<TOverloads>, operator: TOperator, value: TObject]): TResult;
+	}, [...I, 1]>;
 
-export const calc: CalcExpression = (...equation) => {
-	let left = literalAt(0);
+type Val = Decimal | number;
+type Op = Operator | OperatorKey;
+type DecimalCalc = CalcOverloads<Decimal, Val, Op>;
+
+export const calc: DecimalCalc = (...equation) => {
+	let left = valueAt(0);
 	let right: Decimal;
 	let operator: Operator;
 	for (let i = 1; i < equation.length; i += 2) {
-		operator = opAt(i);
-		right = literalAt(i + 1);
+		operator = operatorAt(i);
+		right = valueAt(i + 1);
 		left = operator(left, right);
 	}
 	return left;
 
-	function literalAt(idx: number) {
-		return Decimal(equation[idx] as Literal);
+	function valueAt(idx: number) {
+		return Decimal(equation[idx] as Val);
 	}
-	function opAt(idx: number) {
+	function operatorAt(idx: number) {
 		const op = equation[idx] as Op;
 		if (typeof op === "string") {
 			return operators[op];
@@ -43,7 +43,8 @@ export const calc: CalcExpression = (...equation) => {
 };
 
 export interface Operator {
-	(left: Decimal, right: Decimal): Decimal;
+	T?: Decimal;
+	(left: {} & this["T"], right: {} & this["T"]): {} & this["T"];
 }
 
 export interface Decimal {
@@ -52,18 +53,20 @@ export interface Decimal {
 }
 
 export function Decimal(input: number | string | Decimal): Decimal {
-	const MAX_SAFE_EXPONENT = 20;
 	if (typeof input === "object") {
-		if (input.pow < 0) {
-			throw new Error("Power cannot be negative");
-		}
 		return input;
 	}
 	let int: bigint;
 	let pow: number;
 	if (typeof input === "string") {
-		pow = input.slice(input.indexOf(".")).length - 1;
-		int = BigInt(input.replace(".", ""));
+		let pointIdx = input.indexOf(".");
+		if (pointIdx === -1) {
+			int = BigInt(input);
+			pow = 0;
+		} else {
+			int = BigInt(input.replace(".", ""));
+			pow = input.length - pointIdx - 1;
+		}
 	} else {
 		pow = 0;
 		while (!Number.isInteger(input * 10 ** pow) && pow < MAX_SAFE_EXPONENT) {
@@ -77,11 +80,12 @@ export function Decimal(input: number | string | Decimal): Decimal {
 		pow,
 	};
 }
+const MAX_SAFE_EXPONENT = 20;
 
 export const plus: Operator = (l, r) => {
-	let pow = l.pow;
-	if (l.pow > r.pow) r = scaleUp(r, l.pow);
-	if (r.pow > l.pow) l = scaleUp(l, (pow = r.pow));
+	let pow = Math.max(l.pow, r.pow);
+	r = scaleUp(r, pow);
+	l = scaleUp(l, pow);
 	return {
 		int: l.int + r.int,
 		pow,
@@ -116,38 +120,33 @@ export const mod: Operator = (l, r) => {
 	};
 };
 
-export const format = (decimal: Decimal) => {
+export const format = (Decimal.format = (decimal: Decimal) => {
 	decimal = scaleDown(decimal);
-	const string = String(decimal.int);
-	const intsEnd = string.length - decimal.pow;
-	const ints = string.slice(0, intsEnd);
-	const decs = string.slice(intsEnd);
-	const parts: string[] = [];
-	if (ints === "") {
-		parts.push("0");
-	} else {
-		parts.push(ints);
-	}
+	let string = String(decimal.int);
+	let intsEnd = string.length - decimal.pow;
+	let decs = string.slice(intsEnd);
+	let ints = string.slice(0, intsEnd) || "0";
 	if (decs !== "") {
-		parts.push(decs);
+		ints = `${ints}.${decs}`;
 	}
-	return parts.join(".");
-};
-Decimal.format = format;
+	return ints;
+});
 
-export const scaleUp = (decimal: Decimal, targetPower: number): Decimal => {
+export const scaleUp = (Decimal.scaleUp = (
+	decimal: Decimal,
+	targetPower: number,
+): Decimal => {
 	if (decimal.pow === targetPower) {
 		return decimal;
 	}
-	const factor = BigInt(10 ** (targetPower - decimal.pow));
+	let factor = BigInt(10 ** (targetPower - decimal.pow));
 	return {
 		int: decimal.int * factor,
 		pow: targetPower,
 	};
-};
-Decimal.scaleUp = scaleUp;
+});
 
-export const scaleDown = (decimal: Decimal): Decimal => {
+export const scaleDown = (Decimal.scaleDown = (decimal: Decimal): Decimal => {
 	if (decimal.pow === 0) {
 		return decimal;
 	}
@@ -157,8 +156,7 @@ export const scaleDown = (decimal: Decimal): Decimal => {
 		pow--;
 	}
 	return { int, pow };
-};
-Decimal.scaleDown = scaleDown;
+});
 
 type OperatorKey = keyof typeof operators;
 const operators = {
@@ -167,3 +165,32 @@ const operators = {
 	"*": times,
 	"%": mod,
 };
+
+// type Arr = Array<Literal | Op>;
+// // type Alternating<A extends Exp, B extends Exp = A> = B extends []
+// // 	? A
+// // 	: B extends [Literal, Op?, ...infer Rest extends Exp]
+// // 	? Alternating<A, Rest>
+// // 	: [...A, Literal, Op?]
+
+// type Alternating<
+// 	V extends { a: {}; b: {} },
+// 	Self extends V[keyof V][],
+// 	Good extends any[] = [],
+// 	Other extends V[keyof V] = V["a"],
+// > = Self extends []
+// 	? Good
+// 	: Self extends [Other, ...infer Rest extends V[keyof V][]]
+// 		? Alternating<
+// 				V,
+// 				Rest,
+// 				[...Good, Other],
+// 				Other extends V["a"] ? V["b"] : V["a"]
+// 			>
+// 		: Good;
+
+// type Complete<T extends Arr> = T extends [...Arr, Literal]
+// 	? [...T, Op?]
+// 	: T extends [...Arr, Literal, Op]
+// 		? [...T, Literal]
+// 		: T;
