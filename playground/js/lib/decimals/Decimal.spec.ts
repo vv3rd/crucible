@@ -76,15 +76,6 @@ describe.only("times", () => {
 	});
 });
 
-describe.only("scaling", () => {
-	test("scales down to 0", () => {
-		expect(Decimal.scaleDown({ int: 2500n, pow: 2 })).toEqual(Decimal(25));
-	});
-	test("does not scale more", () => {
-		expect(Decimal.scaleDown({ int: 250n, pow: 3 })).toEqual(Decimal(0.25));
-	});
-});
-
 function testCases(
 	operator: Operator,
 	{

@@ -17,6 +17,7 @@
 		"@types/bun": "^1.1.6",
 		"@types/react": "^19.0.1",
 		"@types/react-dom": "^19.0.2",
+		"mitata": "^1.0.34",
 		"type-testing": "^0.2.0",
 		"typescript": "5.7.2",
 		"vite": "^5.2.0"

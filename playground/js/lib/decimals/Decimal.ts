@@ -1,12 +1,16 @@
 type MaxOperations = 10;
+
+type CalcBase<TResult, TObject, TOperator> = {
+	(...args: [left: TObject, operator: TOperator, right: TObject]): TResult;
+	(equation: Array<TObject | TOperator>): TResult;
+};
+
 // biome-ignore format:
 type CalcOverloads<
 	TResult,
 	TObject,
 	TOperator,
-	TOverloads extends (...equation: any[]) => any = (
-		...args: [left: TObject, operator: TOperator, right: TObject]
-	) => TResult,
+	TOverloads extends (...equation: any[]) => any = CalcBase<TResult, TObject, TOperator>,
 	I extends ReadonlyArray<number> = [],
 > = I["length"] extends MaxOperations
 	? TOverloads
@@ -19,6 +23,9 @@ type Op = Operator | OperatorKey;
 type DecimalCalc = CalcOverloads<Decimal, Val, Op>;
 
 export const calc: DecimalCalc = (...equation) => {
+	if (equation.length === 1 && equation[0] instanceof Array) {
+		equation = equation[0] as typeof equation;
+	}
 	let left = valueAt(0);
 	let right: Decimal;
 	let operator: Operator;
@@ -33,12 +40,11 @@ export const calc: DecimalCalc = (...equation) => {
 		return Decimal(equation[idx] as Val);
 	}
 	function operatorAt(idx: number) {
-		const op = equation[idx] as Op;
+		let op = equation[idx] as Op;
 		if (typeof op === "string") {
-			return operators[op];
-		} else {
-			return op;
+			op = operators[op];
 		}
+		return op;
 	}
 };
 
@@ -69,10 +75,11 @@ export function Decimal(input: number | string | Decimal): Decimal {
 		}
 	} else {
 		pow = 0;
-		while (!Number.isInteger(input * 10 ** pow) && pow < MAX_SAFE_EXPONENT) {
+		while (!Number.isInteger(input)) {
+			input *= 10;
 			pow++;
 		}
-		int = BigInt(input * 10 ** pow);
+		int = BigInt(input);
 	}
 
 	return {
@@ -80,7 +87,6 @@ export function Decimal(input: number | string | Decimal): Decimal {
 		pow,
 	};
 }
-const MAX_SAFE_EXPONENT = 20;
 
 export const plus: Operator = (l, r) => {
 	let pow = Math.max(l.pow, r.pow);

@@ -9,6 +9,5 @@ describe("Reducer.composed", () => {
 		expect(nextState).toBe(fistState);
 	});
 
-	it.todo("todo", () => {
-	});
+	it.todo("todo", () => {});
 });
