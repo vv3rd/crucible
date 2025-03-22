@@ -6,9 +6,9 @@ import { Fn } from "./Fn";
 
 export interface Reducer<TState, TMsg extends Message> {
 	(
-		state: TState | undefined,
-		message: TMsg,
-		scheduler: TaskScheduler<TState>,
+		Reducer_currentState: TState | undefined,
+		Reducer_message: TMsg,
+		Reducer_taskScheduler: TaskScheduler<TState>,
 	): TState;
 }
 
@@ -17,33 +17,13 @@ type AnyReducer = Reducer<any, any>;
 export namespace Reducer {
 	const InitAction = { type: "INIT-" + Math.random() };
 
-	export const named = createReducerNamed;
+	export const named = createReducerImpl;
 
 	export function initialize<TState>(reducer: Reducer<TState, any>) {
 		return reducer(undefined, InitAction, () => {});
 	}
 
-	export function primitive<T, S extends string>(initialState: T, updType: S) {
-		const updateMsg = Msg.ofType(updType).withPayload<
-			T | ((current: T) => T)
-		>();
-
-		function primitiveReducer(
-			state = initialState,
-			msg: ReturnType<typeof updateMsg>,
-		): T {
-			if (updateMsg.match(msg)) {
-				if (msg.payload instanceof Function) {
-					return msg.payload(state);
-				} else {
-					return msg.payload;
-				}
-			}
-			return state;
-		}
-		primitiveReducer.update = updateMsg;
-		return primitiveReducer;
-	}
+	export const primitive = createPrimitiveReducerImpl;
 
 	export const compose = composeReducersImpl as <M extends Dict<AnyReducer>>(
 		reducersDict: M,
@@ -95,13 +75,13 @@ function composeReducersImpl(reducersObject: Record<string, AnyReducer>) {
 
 interface Accessor<T> {
 	(): T;
-	(state: T | Partial<T>): T;
-	(update: (state: T) => T | Partial<T>): T;
+	(Accessor_state: T | Partial<T>): T;
+	(Accessor_update: (state: T) => T | Partial<T>): T;
 	do: TaskScheduler<T>;
 }
 
-export function createReducerNamed<T, N extends string>(
-	name: N,
+export function createReducerImpl<T, N extends string>(
+	address: N,
 	initialState: T,
 ) {
 	type Named<T extends string> = `${N}/${T}`;
@@ -124,16 +104,20 @@ export function createReducerNamed<T, N extends string>(
 		const messages = Object.fromEntries(
 			keys.map((key) => [
 				key,
-				Msg.ofType(`${name}/${key}`).withPayload<any[]>(),
+				Msg.ofType(`${address}/${key}`).withPayload<any[]>(),
 			]),
 		) as unknown as TMsgs;
 
 		const reducer: Reducer<T, TMsg> = (state = initialState, msg, exec) => {
-			if (!msg.type.startsWith(`${name}/`)) return state;
-			const key = msg.type.slice(name.length + 1);
+			if (!msg.type.startsWith(`${address}/`)) {
+				return state;
+			}
+			const key = msg.type.slice(address.length + 1);
 			const update = updaters[key];
-			if (!update) return state;
-			let accessor = ((...args) => {
+			if (!update) {
+				return state;
+			}
+			const accessor = ((...args) => {
 				if (!args.length) {
 					return state;
 				}
@@ -156,8 +140,32 @@ export function createReducerNamed<T, N extends string>(
 
 		// TODO: add matchers for messages group, add getInitialState
 		return Object.assign(reducer, {
-			msg: messages,
-			name,
+			message: messages,
+			reducer,
+			address,
 		});
 	};
+}
+
+function createPrimitiveReducerImpl<T, S extends string>(
+	initialState: T,
+	updType: S,
+) {
+	const updateMsg = Msg.ofType(updType).withPayload<T | ((current: T) => T)>();
+
+	function primitiveReducer(
+		state = initialState,
+		msg: ReturnType<typeof updateMsg>,
+	): T {
+		if (updateMsg.match(msg)) {
+			if (msg.payload instanceof Function) {
+				return msg.payload(state);
+			} else {
+				return msg.payload;
+			}
+		}
+		return state;
+	}
+	primitiveReducer.update = updateMsg;
+	return primitiveReducer;
 }

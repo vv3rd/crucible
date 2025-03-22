@@ -3,19 +3,19 @@ import { Reducer } from "./Reducer";
 import { areArraysEqual, memoLast } from "../toolkit/memoLast";
 
 // TODO:
-// the Agents problem is not solved until I figure out a way to specify
-// how to select agents module from global state
-export namespace Agent {
+// the Atoms problem is not solved until I figure out a way to specify
+// how to select atoms module from global state
+export namespace Atom {
 	export function create<TValue, TMsg extends Message>(
 		name: string,
 		reducer: Reducer<TValue, TMsg>,
-	): Agent<TValue, TMsg> {
-		// TODO: agent got to have an adderss and a way to address it
-		// deriveed agent then can be defined with a adresser function
-		const self: Agent<TValue, TMsg> = {
+	): Atom<TValue, TMsg> {
+		// TODO: atom got to have an adderss and a way to address it
+		// deriveed atom then can be defined with a adresser function
+		const self: Atom<TValue, TMsg> = {
 			reduce: reducer,
 			select: (globalState) => {
-				const container = globalState["agents"][name];
+				const container = globalState["atoms"][name];
 				if (!container) {
 					return { value: Reducer.initialize(reducer), sources };
 				}
@@ -23,7 +23,7 @@ export namespace Agent {
 			},
 		};
 		const sources = new Set([self]);
-		const select = memoLast((containerState: AgentContainer<TValue>) => ({
+		const select = memoLast((containerState: AtonContainer<TValue>) => ({
 			value: containerState.value,
 			sources,
 		}));
@@ -31,10 +31,10 @@ export namespace Agent {
 	}
 
 	export function derive<T>(
-		getValue: (getter: <V>(agent: Agent<V, any>) => V) => T,
-	): ReadonlyAgent<T> {
-		let sources: Set<Agent<unknown, Message>>;
-		let lastResult: AgentOutput<T> | undefined;
+		getValue: (getter: <V>(atom: Atom<V, any>) => V) => T,
+	): ReadonlyAtom<T> {
+		let sources: Set<Atom<unknown, Message>>;
+		let lastResult: AtomOutput<T> | undefined;
 		let lastSourceValues: unknown[] = [];
 		const sourcesAreUnchanged = (globalState: StateRoot) => {
 			const currentSourceValues = [...sources].map(
@@ -50,8 +50,8 @@ export namespace Agent {
 				}
 
 				sources = new Set();
-				const value = getValue((agent) => {
-					const selection = agent.select(globalState);
+				const value = getValue((atom) => {
+					const selection = atom.select(globalState);
 					for (const d of selection.sources) {
 						sources.add(d);
 					}
@@ -65,29 +65,29 @@ export namespace Agent {
 		};
 	}
 
-	export function constant<T>(value: T): ReadonlyAgent<T> {
-		const result: AgentOutput<T> = { value, sources: [] };
+	export function constant<T>(value: T): ReadonlyAtom<T> {
+		const result: AtomOutput<T> = { value, sources: [] };
 		return {
 			select: () => result,
 		};
 	}
 }
 
-type Sources = Iterable<Agent<any, any>>;
+type Sources = Iterable<Atom<any, any>>;
 
-type AgentOutput<TState> = {
+type AtomOutput<TState> = {
 	value: TState;
 	sources: Sources;
 };
 
-type AgentContainer<T> = {
+type AtonContainer<T> = {
 	value: T;
 };
 
-interface ReadonlyAgent<T> extends Selectable<AgentOutput<T>> {}
+interface ReadonlyAtom<T> extends Selectable<AtomOutput<T>> {}
 
-interface Agent<TState, TMsg extends Message> extends ReadonlyAgent<TState> {
+interface Atom<TState, TMsg extends Message> extends ReadonlyAtom<TState> {
 	// TODO: somewhere here must be an .address method to send msg to this
-	// specific agent
+	// specific atom
 	reduce: Reducer<TState, TMsg>;
 }

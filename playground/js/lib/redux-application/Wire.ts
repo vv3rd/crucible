@@ -17,22 +17,28 @@ interface WiringRoot extends StateRoot {
 	readonly [wiringKey]?: Record<string, (state: WiringRoot) => unknown>;
 }
 
+interface WiredReducer<TState, TMsg extends Message>
+	extends Reducer<TState, TMsg> {
+	select: (root: WiringRoot) => TState | undefined;
+}
+
 export function createWired<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
-): Reducer<TState, TMsg> {
+): WiredReducer<TState, TMsg> {
 	const wireId = Math.random().toString(36).substring(2);
-	// TODO: implement this
-	// const select = (root: WiringRoot) => {
-	// 	const selector = root?.[wiringKey]?.[wireId];
-
-	// 	return selector?.(root);
-	// };
-	return (state, msg, schedule) => {
+	const wiredReducer: WiredReducer<TState, TMsg> = (state, msg, schedule) => {
 		if (WireProbeMsg.match(msg)) {
 			schedule(msg.payload[probeKey]<TState>(wireId));
 		}
 		return reducer(state, msg, schedule);
 	};
+	wiredReducer.select = (root: WiringRoot) => {
+		const wiringMeta = root[wiringKey];
+		const selector = wiringMeta?.[wireId];
+		const output = selector?.(root);
+		return output as TState | undefined;
+	};
+	return wiredReducer;
 }
 
 export function createWiringRoot(reducer: Reducer<WiringRoot, any>) {

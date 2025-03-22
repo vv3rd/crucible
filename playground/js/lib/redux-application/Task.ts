@@ -4,7 +4,7 @@ import { Matchable, Message, AnyMessage } from "./types";
 
 export type AnyTask<R = any> = Task<any, R>;
 export interface Task<TState, TResult> {
-	(ctl: TaskControls<TState>): TResult;
+	(Task_taskCtl: TaskControls<TState>): TResult;
 }
 
 export namespace Task {
@@ -71,7 +71,7 @@ export namespace TaskControls {
 }
 
 export interface TaskScheduler<TState> {
-	(task: Task<TState, void>): void;
+	(TaskScheduler_taskFn: Task<TState, void>): void;
 }
 export namespace TaskScheduler {
 	export const scoped =
