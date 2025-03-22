@@ -61,11 +61,11 @@ export interface TaskControls<TState> extends Store<TState, AnyMessage> {
 export namespace TaskControls {
 	export const scoped = <TStateA, TStateB>(
 		ctl: TaskControls<TStateA>,
-		seletor: (state: TStateA) => TStateB,
+		selector: (state: TStateA) => TStateB,
 	): TaskControls<TStateB> => {
 		return {
 			...ctl,
-			getState: () => seletor(ctl.getState()),
+			getState: () => selector(ctl.getState()),
 		};
 	};
 }
@@ -79,8 +79,8 @@ export namespace TaskScheduler {
 			unscopedScheduler: TaskScheduler<TStateA>,
 			selector: (state: TStateA) => TStateB,
 		): TaskScheduler<TStateB> =>
-		(taksFn) => {
-			unscopedScheduler((ctl) => taksFn(TaskControls.scoped(ctl, selector)));
+		(taskFn) => {
+			unscopedScheduler((ctl) => taskFn(TaskControls.scoped(ctl, selector)));
 		};
 }
 

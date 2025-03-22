@@ -7,5 +7,5 @@ export const FUCK_INTERNALS_USED =
 export const FUCK_TASK_POOL_CLOSED =
 	"Can't schedule task once reducer returned";
 
-export const FUCK_TASK_NOT_REAL = "Taks api on wire probe message is a stub";
+export const FUCK_TASK_NOT_REAL = "Task api on wire probe message is a stub";
 

@@ -24,7 +24,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 		task: undefined,
 		isValidating: false,
 		isSubmitting: false,
-		submitAttemt: 0,
+		submitAttempt: 0,
 	};
 
 	const getInitialState = (input: TInitArg): ItsFormState => {
@@ -85,7 +85,7 @@ export function createFormReducer<TValues extends Form.Values, TInitArg = void>(
 				return {
 					...state,
 					isSubmitting: true,
-					submitAttemt: state.submitAttemt + 1,
+					submitAttempt: state.submitAttempt + 1,
 				};
 			case Form.MsgType.SubmitFail:
 				return { ...state, isSubmitting: false };
@@ -222,7 +222,7 @@ export function createFieldReducer<TValue>(
 			return field;
 		}
 		if (msg.name === field.name) {
-			const attempt = msg.form?.submitAttemt ?? 0;
+			const attempt = msg.form?.submitAttempt ?? 0;
 			switch (msg.type) {
 				case Field.MsgType.Changed: {
 					const value = msg.payload;
@@ -346,7 +346,7 @@ export namespace Form {
 	export interface Statuses {
 		isValidating: boolean;
 		isSubmitting: boolean;
-		submitAttemt: SubmitAttempt;
+		submitAttempt: SubmitAttempt;
 	}
 	export type CommonState<TValues extends Values> = Statuses & {
 		notes: NonNullable<CheckNotes<TValues>>;

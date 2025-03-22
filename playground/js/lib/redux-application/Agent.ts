@@ -10,8 +10,8 @@ export namespace Atom {
 		name: string,
 		reducer: Reducer<TValue, TMsg>,
 	): Atom<TValue, TMsg> {
-		// TODO: atom got to have an adderss and a way to address it
-		// deriveed atom then can be defined with a adresser function
+		// TODO: atom got to have an address and a way to address it
+		// derived atom then can be defined with a addresser function
 		const self: Atom<TValue, TMsg> = {
 			reduce: reducer,
 			select: (globalState) => {
