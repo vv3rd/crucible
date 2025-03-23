@@ -29,10 +29,7 @@ export namespace Task {
 	};
 	export type InferState<R> = R extends Task<infer S, any> ? S : never;
 
-	export const run = <TState>(
-		task: Task<TState, unknown>,
-		store: Store<TState, AnyMessage>,
-	) => {
+	export const run = <TState>(task: Task<TState, unknown>, store: Store<TState, AnyMessage>) => {
 		const ac = new AbortController();
 		const signal = ac.signal;
 		const ctl: TaskControls<TState> = {
@@ -87,9 +84,7 @@ export namespace TaskScheduler {
 export function taskExt<T>(ctl: TaskControls<T>) {
 	async function condition(checker: (state: T) => boolean): Promise<T>;
 
-	async function condition<U extends T>(
-		checker: (state: T) => state is U,
-	): Promise<U>;
+	async function condition<U extends T>(checker: (state: T) => state is U): Promise<U>;
 	async function condition(checker: (state: T) => boolean): Promise<T> {
 		let state = ctl.getState();
 		while (!checker(state)) {

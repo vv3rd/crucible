@@ -33,9 +33,7 @@ export namespace Reducer {
 		M extends Dict<AnyReducer>,
 		var_State = { [P in keyof M]: InferState<M[P]> },
 		var_Msg extends Message = InferMsg<M[keyof M]>,
-	> = keyof M extends never
-		? Reducer<{}, AnyMessage>
-		: Reducer<var_State, var_Msg>;
+	> = keyof M extends never ? Reducer<{}, AnyMessage> : Reducer<var_State, var_Msg>;
 
 	export type InferMsg<R> = R extends Reducer<any, infer A> ? A : never;
 	export type InferState<R> = R extends Reducer<infer S, any> ? S : never;
@@ -80,32 +78,22 @@ interface Accessor<T> {
 	do: TaskScheduler<T>;
 }
 
-export function createReducerImpl<T, N extends string>(
-	address: N,
-	initialState: T,
-) {
-	type Named<T extends string> = `${N}/${T}`;
+export function createReducerImpl<T, N extends string>(address: N, initialState: T) {
+	type Addressed<T extends string> = `${N}/${T}`;
 
-	type TUpdaters = Record<
-		string,
-		(this: Accessor<T>, ...args: any[]) => void | T
-	>;
+	type TUpdaters = Record<string, (this: Accessor<T>, ...args: any[]) => void | T>;
 
 	return <R extends TUpdaters>(updaters: R) => {
 		type TMsgs = {
-			[K in keyof R & string]: Msg.Writer<
-				Named<K>,
-				Fn<Parameters<R[K]>, MessageWith<Parameters<R[K]>, Named<K>>>
+			[K in keyof R & string]: Msg.TypedFactory<
+				Fn.Like<R[K], { returns: MessageWith<Parameters<R[K]>, Addressed<K>> }>
 			>;
 		};
 		type TMsg = ReturnType<TMsgs[keyof TMsgs]>;
 
 		const keys = Object.keys(updaters);
 		const messages = Object.fromEntries(
-			keys.map((key) => [
-				key,
-				Msg.ofType(`${address}/${key}`).withPayload<any[]>(),
-			]),
+			keys.map((key) => [key, Msg.ofType(`${address}/${key}`).withPayload<any[]>()]),
 		) as unknown as TMsgs;
 
 		const reducer: Reducer<T, TMsg> = (state = initialState, msg, exec) => {
@@ -147,16 +135,10 @@ export function createReducerImpl<T, N extends string>(
 	};
 }
 
-function createPrimitiveReducerImpl<T, S extends string>(
-	initialState: T,
-	updType: S,
-) {
+function createPrimitiveReducerImpl<T, S extends string>(initialState: T, updType: S) {
 	const updateMsg = Msg.ofType(updType).withPayload<T | ((current: T) => T)>();
 
-	function primitiveReducer(
-		state = initialState,
-		msg: ReturnType<typeof updateMsg>,
-	): T {
+	function primitiveReducer(state = initialState, msg: ReturnType<typeof updateMsg>): T {
 		if (updateMsg.match(msg)) {
 			if (msg.payload instanceof Function) {
 				return msg.payload(state);
