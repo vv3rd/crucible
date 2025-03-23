@@ -8,7 +8,7 @@ type Case = [
 	operationResult: number,
 ];
 
-describe.only("plus", () => {
+describe("plus", () => {
 	testCases(plus, {
 		associative: true,
 		withZeros: [
@@ -52,7 +52,7 @@ describe("minus", () => {
 	});
 });
 
-describe.only("times", () => {
+describe("times", () => {
 	// fails
 	testCases(times, {
 		associative: true,

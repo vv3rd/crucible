@@ -2,9 +2,7 @@ type Entry<T> = {
 	[K in keyof T]: [key: K, value: T[K]];
 }[keyof T];
 
-type Intersection<T> = (T extends any ? (t: T) => any : never) extends (
-	i: infer I,
-) => any
+type Intersection<T> = (T extends any ? (t: T) => any : never) extends (i: infer I) => any
 	? I
 	: never;
 
