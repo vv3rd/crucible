@@ -46,10 +46,14 @@ type Executor<TState, TMsg extends Message> = (
 	store: Lazy<Store<TState, TMsg>>,
 ) => void;
 
-export const createStore = <TState, TMsg extends Message>(
+export namespace Store {
+	export const create = createStore;
+}
+
+export function createStore<TState, TMsg extends Message>(
 	reducer: Reducer<TState, TMsg>,
 	overlay: StoreOverlay = identity,
-): Store<TState, TMsg> => {
+): Store<TState, TMsg> {
 	let storeAccessor = (): typeof store => {
 		try {
 			return store;
@@ -63,7 +67,7 @@ export const createStore = <TState, TMsg extends Message>(
 	});
 	storeAccessor = () => store;
 	return store;
-};
+}
 
 const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 	type TState = Reducer.InferState<typeof reducer>;
@@ -79,6 +83,9 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 
 	const activeStore: Store<TState, TMsg> = {
 		dispatch(msg) {
+			if (msg == null) {
+				return;
+			}
 			const tpb = Task.pool<TState, void>();
 			try {
 				delegate = lockedStore;

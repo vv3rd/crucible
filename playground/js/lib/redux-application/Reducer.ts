@@ -14,6 +14,10 @@ export interface Reducer<TState, TMsg extends Message> {
 
 type AnyReducer = Reducer<any, any>;
 
+export function Reducer<TState, TMsg extends Message>(reducer: Reducer<TState, TMsg>) {
+	return reducer;
+}
+
 export namespace Reducer {
 	const InitAction = { type: "INIT-" + Math.random() };
 

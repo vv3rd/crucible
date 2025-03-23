@@ -1,0 +1,26 @@
+import { describe, test } from "bun:test";
+import { Store } from "../Store";
+import { Reducer } from "../Reducer";
+import { Atom } from "../Agent";
+import { createWiringRoot } from "../Wire";
+
+describe.only("Atom", () => {
+	test("kitchen sink", () => {
+		const store = Store.create(
+			createWiringRoot(
+				Reducer.compose({
+					$atomics: Atom.defaultRoot.reducer,
+				}),
+			),
+		);
+		store.subscribe(({ lastMessage }) => {
+			console.log(lastMessage(), store.getState());
+		});
+
+		const foldCount = Reducer.primitive(0, "count-update");
+		const count$ = Atom("count$", foldCount);
+		const countOut = count$.select(store.getState());
+		store.dispatch(countOut.mount());
+		store.dispatch(countOut.package(foldCount.update(2)));
+	});
+});

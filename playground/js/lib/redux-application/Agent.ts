@@ -1,33 +1,34 @@
 import { Message } from "./types";
 import { Reducer } from "./Reducer";
-import { createWired, WiredReducer, WiringRoot } from "./Wire";
+import { createWireUtils, WiredReducer, WiringRoot } from "./Wire";
 import { TaskScheduler } from "./Task";
 
-interface Atom<TValue, TMsg extends Message> {
+export interface Atom<TValue, TMsg extends Message> {
 	address: string;
 	reducer: Reducer<TValue, AtomMsg<TMsg>>;
-	package: (message: TMsg) => void;
-	select: (root: WiringRoot) => Atom.Result<TValue, TMsg>;
+	package: (message: TMsg) => AtomMsg.To<TMsg>;
+	select: (root: WiringRoot) => Atom.Out<TValue, TMsg>;
 	// TODO: consider if somewhere here must be an .address
 	// method to send msg to this specific atom
 }
 
-interface DerivedAtom<TValue> {
-	select: (root: WiringRoot) => Atom.DerivedResult<TValue>;
+export interface DerivedAtom<TValue> {
+	select: (root: WiringRoot) => Atom.DerivedOut<TValue>;
 }
 
 export function Atom<TValue, TMsg extends Message>(
 	address: string,
 	reducer: Reducer<TValue, AtomMsg<TMsg>>,
-	context = Atom.defaultContext,
+	customContext = Atom.defaultContext,
 ): Atom<TValue, TMsg> {
-	let cache: Atom.Result<TValue, TMsg> | undefined;
+	const ctx = customContext;
+	let cache: Atom.Out<TValue, TMsg> | undefined;
 	const self: Atom<TValue, TMsg> = {
 		address: address,
 		reducer: reducer,
-		package: (msg) => AtomMsg.to(self, msg, context.rootName),
+		package: (msg) => AtomMsg.to(self, msg, ctx.rootName),
 		select: (root) => {
-			const maybeValue = context.selectRoot(root).__atomValues[address];
+			const maybeValue = ctx.selectRoot(root).__atomValues[address];
 			let value: TValue;
 			if (maybeValue === void 0) {
 				value = Reducer.initialize(reducer);
@@ -47,8 +48,8 @@ export function Atom<TValue, TMsg extends Message>(
 		},
 	};
 	const sources = new Set([self]);
-	const mount = () => AtomMsg.mount(sources, context.rootName);
-	const unmount = () => AtomMsg.unmount(sources, context.rootName);
+	const mount = () => AtomMsg.mount(sources, ctx.rootName);
+	const unmount = () => AtomMsg.unmount(sources, ctx.rootName);
 	return self;
 }
 
@@ -57,15 +58,15 @@ export namespace Atom {
 	export interface SourcesArray extends Array<AnyAtom> {}
 	export interface SourcesSet extends Set<AnyAtom> {}
 
-	export interface DerivedResult<TValue> {
+	export interface DerivedOut<TValue> {
 		value: TValue;
 		sources: Sources;
 		mount: () => AtomMsg.Mount;
 		unmount: () => AtomMsg.Unmount;
 	}
 
-	export interface Result<TValue, TMsg extends Message> extends DerivedResult<TValue> {
-		package: (message: TMsg) => void;
+	export interface Out<TValue, TMsg extends Message> extends DerivedOut<TValue> {
+		package: (message: TMsg) => AtomMsg.To<TMsg>;
 	}
 
 	export type Value<T> = T & {
@@ -99,9 +100,9 @@ export namespace Atom {
 		getValue: (getter: <V>(atom: Atom<V, any>) => V) => T,
 		context = defaultContext,
 	): DerivedAtom<T> {
-		let lastResult: DerivedResult<T> | undefined;
+		let lastResult: DerivedOut<T> | undefined;
 		let lastSources: SourcesArray = [];
-		let lastSourcesResults: DerivedResult<any>[] = [];
+		let lastSourcesResults: DerivedOut<any>[] = [];
 
 		return {
 			select(globalState: WiringRoot) {
@@ -135,7 +136,7 @@ export namespace Atom {
 
 type AnyAtom = Atom<any, any>;
 
-export type AtomMsg<TMsg extends Message> = TMsg | Message<"Mount"> | Message<"Unmount">;
+export type AtomMsg<TMsg extends Message> = TMsg;
 
 export function AtomMsg() {}
 
@@ -160,7 +161,7 @@ export namespace AtomMsg {
 	unmount.match = (msg: Message, rootName: string = Atom.defaultRoot.name): msg is Unmount =>
 		msg.type === `${rootName}/unmountingAtoms`;
 
-	export type To = ReturnType<typeof to>;
+	export type To<TMsg extends Message> = ReturnType<typeof to<TMsg>>;
 	export function to<TMsg extends Message>(
 		atom: Atom<any, TMsg>,
 		message: TMsg,
@@ -172,22 +173,28 @@ export namespace AtomMsg {
 			payload: message,
 		};
 	}
-	to.match = (msg: Message, rootName: string = Atom.defaultRoot.name): msg is To =>
+	to.match = (msg: Message, rootName: string = Atom.defaultRoot.name): msg is To<any> =>
 		msg.type.startsWith(`${rootName}/to-atom:`);
 }
 
 function createAtomsRootImpl(rootName: string) {
-	type Msg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.To;
-	type State = Atom.Root;
+	type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.To<any>;
 
-	const initialState: State = { __atomValues: {}, __atomReducers: {} };
+	const [connectWire, selectIt] = createWireUtils<Atom.Root>();
 
-	const atomsRootReducer = createWired<State, Msg>((state = initialState, msg, exec) => {
+	const atomsRootReducer: Reducer<Atom.Root, AtomRootMsg> = (
+		rootState = { __atomValues: {}, __atomReducers: {} },
+		msg,
+		exec,
+	) => {
+		connectWire(msg, exec);
+
 		if (AtomMsg.to.match(msg)) {
-			const currentAtoms = state.__atomValues;
+			// TODO: what to do when atom is not mounted? log a warning?
+			const currentAtoms = rootState.__atomValues;
 			let nextAtoms = currentAtoms;
-			for (const address in state.__atomReducers) {
-				const reducer = state.__atomReducers[address]!;
+			for (const address in rootState.__atomReducers) {
+				const reducer = rootState.__atomReducers[address]!;
 				const scopedExec = TaskScheduler.scoped(exec, (s) => s.__atomValues[address]!);
 				const valueWas = currentAtoms?.[address];
 				const valueNow = reducer(valueWas, msg.payload, scopedExec);
@@ -199,13 +206,13 @@ function createAtomsRootImpl(rootName: string) {
 				}
 			}
 			if (nextAtoms !== currentAtoms) {
-				state = { ...state, __atomValues: nextAtoms };
+				rootState = { ...rootState, __atomValues: nextAtoms };
 			}
 		}
 
 		if (AtomMsg.mount.match(msg, rootName)) {
 			const newAtoms = [...msg.payload]
-				.filter((atom) => !(atom.address in state.__atomReducers))
+				.filter((atom) => !(atom.address in rootState.__atomReducers))
 				.map(({ address, reducer }) => ({
 					value: reducer(undefined, { type: "Mount" }, exec),
 					reducer: reducer,
@@ -213,33 +220,33 @@ function createAtomsRootImpl(rootName: string) {
 				}));
 			const newValues = Object.fromEntries(newAtoms.map((a) => [a.address, a.value]));
 			const newReducers = Object.fromEntries(newAtoms.map((a) => [a.address, a.reducer]));
-			state = { ...state };
-			state.__atomValues = { ...state.__atomValues, ...newValues };
-			state.__atomReducers = { ...state.__atomReducers, ...newReducers };
+			rootState = { ...rootState };
+			rootState.__atomValues = { ...rootState.__atomValues, ...newValues };
+			rootState.__atomReducers = { ...rootState.__atomReducers, ...newReducers };
 		}
 
 		if (AtomMsg.unmount.match(msg, rootName)) {
-			state = { ...state };
-			state.__atomValues = { ...state.__atomValues };
-			state.__atomReducers = { ...state.__atomReducers };
+			rootState = { ...rootState };
+			rootState.__atomValues = { ...rootState.__atomValues };
+			rootState.__atomReducers = { ...rootState.__atomReducers };
 			for (const { address } of msg.payload) {
-				const value = state.__atomValues[address];
-				const reducer = state.__atomReducers[address];
+				const value = rootState.__atomValues[address];
+				const reducer = rootState.__atomReducers[address];
 				if (!reducer) {
 					continue;
 				}
 				const scopedExec = TaskScheduler.scoped(exec, (s) => s.__atomValues[address]!);
 				reducer(value, { type: "Unmount" }, scopedExec);
-				delete state.__atomValues[address];
-				delete state.__atomReducers[address];
+				delete rootState.__atomValues[address];
+				delete rootState.__atomReducers[address];
 			}
 		}
 
-		return state;
-	});
-	const selectRoot = atomsRootReducer.select;
+		return rootState;
+	};
+
 	const context = {
-		selectRoot,
+		selectRoot: selectIt,
 		rootName: rootName,
 	};
 
@@ -254,7 +261,7 @@ function createAtomsRootImpl(rootName: string) {
 	return {
 		name: rootName,
 		reducer: atomsRootReducer,
-		select: selectRoot,
+		select: selectIt,
 		createAtom: createAtom,
 		deriveAtom: deriveAtom,
 	};
