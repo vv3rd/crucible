@@ -9,5 +9,20 @@ describe("Reducer.composed", () => {
 		expect(nextState).toBe(fistState);
 	});
 
-	it.todo("todo", () => {});
+	it.todo("todo", () => {
+		type todo = { text: string; completed: boolean };
+		const todosReducer = Reducer.build(
+			"todos",
+			{
+				todos: Array<todo>(),
+			},
+			{
+				todoAdded(item: todo) {
+					this({ todos: [...this().todos, item] });
+				},
+			},
+		);
+		todosReducer.message.todoAdded({ text: "", completed: false });
+		todosReducer.reducer;
+	});
 });

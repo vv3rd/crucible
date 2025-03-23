@@ -4,7 +4,7 @@ import { Task } from "./Task";
 import { identity } from "../toolkit";
 import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
 import { Msg } from "./Message.ts";
-import { AnyFn, Lazy } from "./Fn.ts";
+import { AnyFn } from "./Fn.ts";
 
 export interface Subscription {
 	// extends Disposable {
@@ -13,7 +13,7 @@ export interface Subscription {
 }
 
 export interface ListenerCallback {
-	(notifier: { lastMessage: () => AnyMessage }): void;
+	(notifier: { lastMessage: () => Message }): void;
 }
 
 export interface Store<TState, TMsg extends Message> {
@@ -21,8 +21,8 @@ export interface Store<TState, TMsg extends Message> {
 	getState: () => TState;
 	subscribe: (listener: ListenerCallback) => Subscription;
 	unsubscribe: (listener: AnyFn) => void;
-	nextMessage: () => Promise<AnyMessage>;
-	lastMessage: () => AnyMessage;
+	nextMessage: () => Promise<Message>;
+	lastMessage: () => Message;
 }
 
 export interface Dispatch<TMsg> {
@@ -43,7 +43,7 @@ type Internals<TState, TMsg extends Message> = {
 
 type Executor<TState, TMsg extends Message> = (
 	tasks: Array<Task<TState, void>>,
-	store: Lazy<Store<TState, TMsg>>,
+	accessStore: () => Store<TState, TMsg>,
 ) => void;
 
 export namespace Store {

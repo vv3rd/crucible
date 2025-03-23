@@ -3,6 +3,7 @@ import { TaskScheduler } from "./Task";
 import { Msg } from "./Message";
 import { isPlainObject } from "../toolkit";
 import { Fn } from "./Fn";
+import { Update } from "vite/types/hmrPayload.js";
 
 export interface Reducer<TState, TMsg extends Message> {
 	(
@@ -21,7 +22,7 @@ export function Reducer<TState, TMsg extends Message>(reducer: Reducer<TState, T
 export namespace Reducer {
 	const InitAction = { type: "INIT-" + Math.random() };
 
-	export const named = createReducerImpl;
+	export const build = createSlice;
 
 	export function initialize<TState>(reducer: Reducer<TState, any>) {
 		return reducer(undefined, InitAction, () => {});
@@ -82,61 +83,84 @@ interface Accessor<T> {
 	do: TaskScheduler<T>;
 }
 
-export function createReducerImpl<T, N extends string>(address: N, initialState: T) {
-	type Addressed<T extends string> = `${N}/${T}`;
+type Updaters<T> = {
+	[key: string]: (this: Accessor<T>, ...args: any[]) => void | T;
+};
 
-	type TUpdaters = Record<string, (this: Accessor<T>, ...args: any[]) => void | T>;
+const buildSlice =
+	<TState>() =>
+	<U extends Updaters<TState>>(updaters: U) => ({
+		withInitialState: (initialState: TState) => ({
+			withPrefix: <TName extends string>(name: TName) => createSlice(name, initialState, updaters),
+		}),
+	});
 
-	return <R extends TUpdaters>(updaters: R) => {
-		type TMsgs = {
-			[K in keyof R & string]: Msg.TypedFactory<
-				Fn.Like<R[K], { returns: MessageWith<Parameters<R[K]>, Addressed<K>> }>
-			>;
-		};
-		type TMsg = ReturnType<TMsgs[keyof TMsgs]>;
+type todo = { description: string; completed: boolean };
 
-		const keys = Object.keys(updaters);
-		const messages = Object.fromEntries(
-			keys.map((key) => [key, Msg.ofType(`${address}/${key}`).withPayload<any[]>()]),
-		) as unknown as TMsgs;
+const itemsSlice = buildSlice<{ todos: todo[] }>()({
+	itemAdded(item: todo) {},
+	itemRemoved(item: todo) {},
+	itemsCleared() {},
+})
+	.withInitialState({
+		todos: [],
+	})
+	.withPrefix("todos");
 
-		const reducer: Reducer<T, TMsg> = (state = initialState, msg, exec) => {
-			if (!msg.type.startsWith(`${address}/`)) {
+export function createSlice<T, N extends string, R extends Updaters<T>>(
+	reducerName: N,
+	initialState: T,
+	updaters: R,
+) {
+	type Addressed<K extends string> = `${N}/${K}`;
+	type TMsgs = {
+		[K in keyof R & string]: Msg.TypedFactory<
+			Fn.Like<R[K], { returns: MessageWith<Parameters<R[K]>, Addressed<K>> }>
+		>;
+	};
+	type TMsg = ReturnType<TMsgs[keyof TMsgs]>;
+
+	const keys = Object.keys(updaters);
+	const messages = Object.fromEntries(
+		keys.map((key) => [key, Msg.ofType(`${reducerName}/${key}`).withPayload<any[]>()]),
+	) as unknown as TMsgs;
+
+	const reducer: Reducer<T, TMsg> = (state = initialState, msg, exec) => {
+		if (!msg.type.startsWith(`${reducerName}/`)) {
+			return state;
+		}
+		const key = msg.type.slice(reducerName.length + 1);
+		const update = updaters[key];
+		if (!update) {
+			return state;
+		}
+		const accessor = ((...args) => {
+			if (!args.length) {
 				return state;
 			}
-			const key = msg.type.slice(address.length + 1);
-			const update = updaters[key];
-			if (!update) {
-				return state;
-			}
-			const accessor = ((...args) => {
-				if (!args.length) {
-					return state;
-				}
-				let next = args[0];
-				if (next instanceof Function) next = next(state);
-				if (isPlainObject(state) && isPlainObject(next)) {
-					state = { ...state, ...next };
-				} else {
-					state = next as T;
-				}
-				return state;
-			}) as Accessor<T>;
-			accessor.do = exec;
-			const outState = update.apply(accessor, msg.payload);
-			if (outState !== undefined) {
-				state = outState;
+			let next = args[0];
+			if (next instanceof Function) next = next(state);
+			if (isPlainObject(state) && isPlainObject(next)) {
+				state = { ...state, ...next };
+			} else {
+				state = next as T;
 			}
 			return state;
-		};
-
-		// TODO: add matchers for messages group, add getInitialState
-		return Object.assign(reducer, {
-			message: messages,
-			reducer,
-			address,
-		});
+		}) as Accessor<T>;
+		accessor.do = exec;
+		const outState = update.apply(accessor, msg.payload);
+		if (outState !== undefined) {
+			state = outState;
+		}
+		return state;
 	};
+
+	// TODO: add matchers for messages group, add getInitialState
+	return Object.assign(reducer, {
+		message: messages,
+		reducer,
+		reducerName,
+	});
 }
 
 function createPrimitiveReducerImpl<T, S extends string>(initialState: T, updType: S) {
