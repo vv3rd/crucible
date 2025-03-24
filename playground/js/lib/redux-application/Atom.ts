@@ -1,12 +1,12 @@
-import { Message } from "./types";
 import { Reducer } from "./Reducer";
 import { createWireUtils, WiredReducer, WiringRoot } from "./Wire";
 import { TaskScheduler } from "./Task";
+import { Msg } from "./Message";
 
-export interface Atom<TValue, TMsg extends Message> {
+export interface Atom<TValue, TMsg extends Msg> {
 	address: string;
 	reducer: Reducer<TValue, AtomMsg<TMsg>>;
-	package: (message: TMsg) => AtomMsg.To<TMsg>;
+	envelope: (message: TMsg) => AtomMsg.Envelope<TMsg>;
 	select: (root: WiringRoot) => Atom.Out<TValue, TMsg>;
 	// TODO: consider if somewhere here must be an .address
 	// method to send msg to this specific atom
@@ -16,7 +16,7 @@ export interface DerivedAtom<TValue> {
 	select: (root: WiringRoot) => Atom.DerivedOut<TValue>;
 }
 
-export function Atom<TValue, TMsg extends Message>(
+export function Atom<TValue, TMsg extends Msg>(
 	address: string,
 	reducer: Reducer<TValue, AtomMsg<TMsg>>,
 	customContext = Atom.defaultContext,
@@ -26,7 +26,7 @@ export function Atom<TValue, TMsg extends Message>(
 	const self: Atom<TValue, TMsg> = {
 		address: address,
 		reducer: reducer,
-		package: (msg) => AtomMsg.to(self, msg, ctx.rootName),
+		envelope: (msg) => AtomMsg.to(self, msg, ctx.rootName),
 		select: (root) => {
 			const maybeValue = ctx.selectRoot(root).__atomValues[address];
 			let value: TValue;
@@ -43,7 +43,7 @@ export function Atom<TValue, TMsg extends Message>(
 				mount,
 				unmount,
 				sources,
-				package: self.package,
+				envelope: self.envelope,
 			};
 		},
 	};
@@ -65,8 +65,8 @@ export namespace Atom {
 		unmount: () => AtomMsg.Unmount;
 	}
 
-	export interface Out<TValue, TMsg extends Message> extends DerivedOut<TValue> {
-		package: (message: TMsg) => AtomMsg.To<TMsg>;
+	export interface Out<TValue, TMsg extends Msg> extends DerivedOut<TValue> {
+		envelope: (message: TMsg) => AtomMsg.Envelope<TMsg>;
 	}
 
 	export type Value<T> = T & {
@@ -78,11 +78,11 @@ export namespace Atom {
 			[key: string]: Value<unknown>;
 		};
 		__atomReducers: {
-			[key: string]: Reducer<Value<unknown>, AtomMsg<Message>>;
+			[key: string]: Reducer<Value<unknown>, AtomMsg<Msg>>;
 		};
 	}
 
-	export interface RootInstance extends WiredReducer<Root, Message> {}
+	export interface RootInstance extends WiredReducer<Root, Msg> {}
 
 	export interface Context {
 		selectRoot: RootInstance["select"];
@@ -136,7 +136,7 @@ export namespace Atom {
 
 type AnyAtom = Atom<any, any>;
 
-export type AtomMsg<TMsg extends Message> = TMsg;
+export type AtomMsg<TMsg extends Msg> = TMsg;
 
 export function AtomMsg() {}
 
@@ -148,7 +148,7 @@ export namespace AtomMsg {
 			payload: atoms,
 		};
 	}
-	mount.match = (msg: Message, rootName: string = Atom.defaultRoot.name): msg is Mount =>
+	mount.match = (msg: Msg, rootName: string = Atom.defaultRoot.name): msg is Mount =>
 		msg.type === `${rootName}/mountingAtoms`;
 
 	export type Unmount = ReturnType<typeof unmount>;
@@ -158,11 +158,11 @@ export namespace AtomMsg {
 			payload: atoms,
 		};
 	}
-	unmount.match = (msg: Message, rootName: string = Atom.defaultRoot.name): msg is Unmount =>
+	unmount.match = (msg: Msg, rootName: string = Atom.defaultRoot.name): msg is Unmount =>
 		msg.type === `${rootName}/unmountingAtoms`;
 
-	export type To<TMsg extends Message> = ReturnType<typeof to<TMsg>>;
-	export function to<TMsg extends Message>(
+	export type Envelope<TMsg extends Msg> = ReturnType<typeof to<TMsg>>;
+	export function to<TMsg extends Msg>(
 		atom: Atom<any, TMsg>,
 		message: TMsg,
 		rootName: string = Atom.defaultRoot.name,
@@ -173,12 +173,12 @@ export namespace AtomMsg {
 			payload: message,
 		};
 	}
-	to.match = (msg: Message, rootName: string = Atom.defaultRoot.name): msg is To<any> =>
+	to.match = (msg: Msg, rootName: string = Atom.defaultRoot.name): msg is Envelope<any> =>
 		msg.type.startsWith(`${rootName}/to-atom:`);
 }
 
 function createAtomsRootImpl(rootName: string) {
-	type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.To<any>;
+	type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.Envelope<any>;
 
 	const [connectWire, selectIt] = createWireUtils<Atom.Root>();
 
@@ -250,7 +250,7 @@ function createAtomsRootImpl(rootName: string) {
 		rootName: rootName,
 	};
 
-	const createAtom = <TValue, TMsg extends Message>(
+	const createAtom = <TValue, TMsg extends Msg>(
 		address: string,
 		reducer: Reducer<TValue, AtomMsg<TMsg>>,
 	) => Atom(address, reducer, context);

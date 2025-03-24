@@ -1,7 +1,7 @@
 import { describe, test } from "bun:test";
 import { Store } from "../Store";
 import { Reducer } from "../Reducer";
-import { Atom } from "../Agent";
+import { Atom } from "../Atom";
 import { createWiringRoot } from "../Wire";
 
 describe.only("Atom", () => {
@@ -21,6 +21,6 @@ describe.only("Atom", () => {
 		const count$ = Atom("count$", foldCount);
 		const countOut = count$.select(store.getState());
 		store.dispatch(countOut.mount());
-		store.dispatch(countOut.package(foldCount.update(2)));
+		store.dispatch(countOut.envelope(foldCount.update(2)));
 	});
 });

@@ -144,10 +144,7 @@ export const format = (Decimal.format = (decimal: Decimal) => {
 	return ints;
 });
 
-export const scaleUp = (Decimal.scaleUp = (
-	decimal: Decimal,
-	targetPower: number,
-): Decimal => {
+export const scaleUp = (Decimal.scaleUp = (decimal: Decimal, targetPower: number): Decimal => {
 	if (decimal.pow === targetPower) {
 		return decimal;
 	}
@@ -168,6 +165,7 @@ export const scaleDown = (Decimal.scaleDown = (decimal: Decimal): Decimal => {
 		int = int / 10n;
 		pow--;
 	}
+	// @ts-expect-error
 	return { int, pow };
 });
 

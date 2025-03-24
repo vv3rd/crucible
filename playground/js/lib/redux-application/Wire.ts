@@ -2,31 +2,29 @@ import { FUCK_TASK_NOT_REAL } from "./Errors";
 import { Msg } from "./Message";
 import { Reducer } from "./Reducer";
 import { TaskControls, Task, TaskScheduler } from "./Task";
-import { Message, StateRoot } from "./types";
 
 export namespace Wire {}
 
 const probeKey = Symbol();
-// type WireProbe = ReturnType<typeof WireProbeMsg>;
-type ProbeTask = <S>(wireId: string) => (api: TaskControls<S>) => void;
-
-const WireProbe = Msg.ofType("_WireProbe_").withPayload((task: ProbeTask) => ({
-	[probeKey]: task,
-}));
+const probeMsg = Msg.ofType(`wire-${Math.round(Math.random() * 100)}`).withPayload(
+	(task: <S>(wireId: string) => (api: TaskControls<S>) => void) => ({
+		[probeKey]: task,
+	}),
+);
 
 const wiringKey = Symbol();
-export interface WiringRoot extends StateRoot {
+export interface WiringRoot {
 	readonly [wiringKey]?: Record<string, (state: WiringRoot) => unknown>;
 }
 
-export interface WiredReducer<TState, TMsg extends Message> extends Reducer<TState, TMsg> {
+export interface WiredReducer<TState, TMsg extends Msg> extends Reducer<TState, TMsg> {
 	select: (root: WiringRoot) => TState;
 }
 
 export function createWireUtils<TState>() {
 	const wireId = Math.random().toString(36).substring(2);
-	const connector = (msg: Message, exec: TaskScheduler<TState>) => {
-		if (WireProbe.match(msg)) {
+	const connector = (msg: Msg, exec: TaskScheduler<TState>) => {
+		if (probeMsg.match(msg)) {
 			exec(msg.payload[probeKey](wireId));
 		}
 	};
@@ -40,7 +38,7 @@ export function createWireUtils<TState>() {
 	return [connector, selector] as const;
 }
 
-export function createWire<TState, TMsg extends Message>(
+export function createWire<TState, TMsg extends Msg>(
 	reducer: Reducer<TState, TMsg>,
 ): WiredReducer<TState, TMsg> {
 	const [connect, selectSelf] = createWireUtils<TState>();
@@ -52,17 +50,17 @@ export function createWire<TState, TMsg extends Message>(
 	return wiredReducer;
 }
 
-export function createWiringRoot<TState extends object, TMsg extends Message>(
+export function createWiringRoot<TState extends object, TMsg extends Msg>(
 	reducer: Reducer<TState, TMsg>,
 ) {
 	type WiredState = WiringRoot & TState;
 	const wireMeta: Record<string, (state: WiredState) => unknown> = {};
-	const probeMsg = WireProbe((wireId) => (api) => {
+	const probe = probeMsg((wireId) => (api) => {
 		wireMeta[wireId] = createWireSelector(api.getState);
 	});
 	const tpb = Task.pool<WiredState, any>();
 	try {
-		reducer(undefined, probeMsg as any, tpb.getScheduler());
+		reducer(undefined, probe as any, tpb.getScheduler());
 	} finally {
 		tpb.lockScheduler();
 	}

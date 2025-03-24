@@ -1,33 +1,45 @@
 import { identity } from "../toolkit";
 import { Fn } from "./Fn";
-import { Message, MessageWith, Pretty } from "./types";
+import { Pretty } from "./types";
 
-export function createMatcher<M extends Message = Message>(type: string) {
-	return (ac: Message): ac is M => ac.type === type;
+export interface Msg<T extends Msg.Type = Msg.Type> {
+	type: T;
+	// [key: string]: unknown;
 }
 
-export function Msg<T extends string, P>(type: T, payload: P): MessageWith<P, T>;
-export function Msg<T extends string>(type: T): Message<T>;
-export function Msg<T extends string, P>(type: T, payload?: P) {
+export interface MsgWith<P, T extends Msg.Type = Msg.Type> extends Msg<T> {
+	payload: P;
+}
+
+export type AnyMsg = Msg<any>;
+
+export function Msg<T extends Msg.Type, P>(type: T, payload: P): MsgWith<P, T>;
+export function Msg<T extends Msg.Type>(type: T): Msg<T>;
+export function Msg<T extends Msg.Type, P>(type: T, payload?: P) {
 	if (!payload) return { type };
 	else return { type, payload };
 }
 
 export namespace Msg {
+	export type Type = string & { readonly MsgType?: unique symbol };
+
 	export function create<T extends string, M extends FactoryFn<any[], T>>(type: T, createMsg: M) {
 		type R = TypedFactory<M>;
 		return Object.assign(createMsg.bind({ type }), createMsg, {
-			match: createMatcher<ReturnType<typeof createMsg>>(type),
+			match: matchByType<ReturnType<typeof createMsg>>(type),
 			type,
 		}) as R;
 	}
 
-	export type AnyFactoryFn = FactoryFn<any[], Message.Type>;
-	export type FactoryFn<
-		I extends any[],
-		T extends Message.Type,
-		M extends Message<T> = Message<T>,
-	> = (this: { type: T }, ...inputs: I) => M;
+	export function matchByType<M extends Msg = Msg>(type: string) {
+		return (ac: Msg): ac is M => ac.type === type;
+	}
+
+	export type AnyFactoryFn = FactoryFn<any[], Msg.Type>;
+	export type FactoryFn<I extends any[], T extends Msg.Type, M extends Msg<T> = Msg<T>> = (
+		this: { type: T },
+		...inputs: I
+	) => M;
 
 	export type AnyTypedFactory = TypedFactory<AnyFactoryFn>;
 	export type TypedFactory<F extends FactoryFn<any[], any>> = Matcher<ReturnType<F>> & {
@@ -35,13 +47,13 @@ export namespace Msg {
 		T: ReturnType<F>;
 	} & F;
 
-	export type SimpleFactory<T extends Message.Type, P = void> = Matcher<{ type: T; payload: P }> & {
+	export type SimpleFactory<T extends Msg.Type, P = void> = Matcher<{ type: T; payload: P }> & {
 		(payload: P): { type: T; payload: P };
 		type: T;
 	};
 
-	export type Matcher<M extends Message> = {
-		match: (message: Message) => message is M;
+	export type Matcher<M extends Msg> = {
+		match: (message: Msg) => message is M;
 	};
 
 	export function ofType<T extends string>(type: T) {

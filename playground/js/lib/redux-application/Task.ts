@@ -1,6 +1,6 @@
 import { FUCK_TASK_POOL_CLOSED } from "./Errors";
+import { AnyMsg, Msg } from "./Message";
 import { Store } from "./Store";
-import { Matchable, Message, AnyMessage } from "./types";
 
 export type AnyTask<R = any> = Task<any, R>;
 export interface Task<TState, TResult> {
@@ -29,7 +29,7 @@ export namespace Task {
 	};
 	export type InferState<R> = R extends Task<infer S, any> ? S : never;
 
-	export const run = <TState>(task: Task<TState, unknown>, store: Store<TState, AnyMessage>) => {
+	export const run = <TState>(task: Task<TState, unknown>, store: Store<TState, AnyMsg>) => {
 		const ac = new AbortController();
 		const signal = ac.signal;
 		const ctl: TaskControls<TState> = {
@@ -51,7 +51,7 @@ export namespace Task {
 	};
 }
 
-export interface TaskControls<TState> extends Store<TState, AnyMessage> {
+export interface TaskControls<TState> extends Store<TState, AnyMsg> {
 	signal: AbortSignal;
 }
 
@@ -94,7 +94,7 @@ export function taskExt<T>(ctl: TaskControls<T>) {
 		return state;
 	}
 
-	async function take<T extends Message>(matcher: Matchable<T>): Promise<T> {
+	async function take<T extends Msg>(matcher: Msg.Matcher<T>): Promise<T> {
 		let awaitedMessage: T | undefined;
 		while (awaitedMessage === undefined) {
 			const msg = await ctl.nextMessage();
@@ -105,7 +105,7 @@ export function taskExt<T>(ctl: TaskControls<T>) {
 		return awaitedMessage;
 	}
 
-	async function* stream(): AsyncGenerator<Message, void, void> {
+	async function* stream(): AsyncGenerator<Msg, void, void> {
 		while (true) yield await ctl.nextMessage();
 	}
 

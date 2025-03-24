@@ -1,11 +1,9 @@
-import { Message, AnyMessage, MessageWith } from "./types";
 import { TaskScheduler } from "./Task";
-import { Msg } from "./Message";
+import { AnyMsg, Msg, MsgWith } from "./Message";
 import { isPlainObject } from "../toolkit";
 import { Fn } from "./Fn";
-import { Update } from "vite/types/hmrPayload.js";
 
-export interface Reducer<TState, TMsg extends Message> {
+export interface Reducer<TState, TMsg extends Msg> {
 	(
 		Reducer_currentState: TState | undefined,
 		Reducer_message: TMsg,
@@ -15,7 +13,7 @@ export interface Reducer<TState, TMsg extends Message> {
 
 type AnyReducer = Reducer<any, any>;
 
-export function Reducer<TState, TMsg extends Message>(reducer: Reducer<TState, TMsg>) {
+export function Reducer<TState, TMsg extends Msg>(reducer: Reducer<TState, TMsg>) {
 	return reducer;
 }
 
@@ -37,8 +35,8 @@ export namespace Reducer {
 	type ReducerFromCombination<
 		M extends Dict<AnyReducer>,
 		var_State = { [P in keyof M]: InferState<M[P]> },
-		var_Msg extends Message = InferMsg<M[keyof M]>,
-	> = keyof M extends never ? Reducer<{}, AnyMessage> : Reducer<var_State, var_Msg>;
+		var_Msg extends Msg = InferMsg<M[keyof M]>,
+	> = keyof M extends never ? Reducer<{}, AnyMsg> : Reducer<var_State, var_Msg>;
 
 	export type InferMsg<R> = R extends Reducer<any, infer A> ? A : never;
 	export type InferState<R> = R extends Reducer<infer S, any> ? S : never;
@@ -115,7 +113,7 @@ export function createSlice<T, N extends string, R extends Updaters<T>>(
 	type Addressed<K extends string> = `${N}/${K}`;
 	type TMsgs = {
 		[K in keyof R & string]: Msg.TypedFactory<
-			Fn.Like<R[K], { returns: MessageWith<Parameters<R[K]>, Addressed<K>> }>
+			Fn.Like<R[K], { returns: MsgWith<Parameters<R[K]>, Addressed<K>> }>
 		>;
 	};
 	type TMsg = ReturnType<TMsgs[keyof TMsgs]>;

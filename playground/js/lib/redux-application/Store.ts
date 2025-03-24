@@ -1,10 +1,9 @@
-import { Message, AnyMessage } from "./types";
 import { Reducer } from "./Reducer";
 import { Task } from "./Task";
 import { identity } from "../toolkit";
 import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
-import { Msg } from "./Message.ts";
 import { AnyFn } from "./Fn.ts";
+import { AnyMsg, Msg } from "./Message.ts";
 
 export interface Subscription {
 	// extends Disposable {
@@ -13,16 +12,16 @@ export interface Subscription {
 }
 
 export interface ListenerCallback {
-	(notifier: { lastMessage: () => Message }): void;
+	(notifier: { lastMessage: () => Msg }): void;
 }
 
-export interface Store<TState, TMsg extends Message> {
+export interface Store<TState, TMsg extends Msg> {
 	dispatch: Dispatch<TMsg>;
 	getState: () => TState;
 	subscribe: (listener: ListenerCallback) => Subscription;
 	unsubscribe: (listener: AnyFn) => void;
-	nextMessage: () => Promise<Message>;
-	lastMessage: () => Message;
+	nextMessage: () => Promise<Msg>;
+	lastMessage: () => Msg;
 }
 
 export interface Dispatch<TMsg> {
@@ -31,17 +30,17 @@ export interface Dispatch<TMsg> {
 
 type StoreOverlay = (creator: InnerStoreCreator) => InnerStoreCreator;
 
-type InnerStoreCreator = <TState, TMsg extends Message>(
+type InnerStoreCreator = <TState, TMsg extends Msg>(
 	reducer: Reducer<TState, TMsg>,
 	internals: Internals<TState, TMsg>,
 ) => Store<TState, TMsg>;
 
-type Internals<TState, TMsg extends Message> = {
+type Internals<TState, TMsg extends Msg> = {
 	tasksExecutor: Executor<TState, TMsg>;
 	storeAccessor: () => Store<TState, TMsg>;
 };
 
-type Executor<TState, TMsg extends Message> = (
+type Executor<TState, TMsg extends Msg> = (
 	tasks: Array<Task<TState, void>>,
 	accessStore: () => Store<TState, TMsg>,
 ) => void;
@@ -50,7 +49,7 @@ export namespace Store {
 	export const create = createStore;
 }
 
-export function createStore<TState, TMsg extends Message>(
+export function createStore<TState, TMsg extends Msg>(
 	reducer: Reducer<TState, TMsg>,
 	overlay: StoreOverlay = identity,
 ): Store<TState, TMsg> {
@@ -118,9 +117,9 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 		},
 	};
 
-	let lastMsg = Msg.empty();
-	let nextMsg: Promise<AnyMessage> | undefined;
-	const setupPromise = (resolve: (msg: AnyMessage) => void) => {
+	let lastMsg: TMsg;
+	let nextMsg: Promise<AnyMsg> | undefined;
+	const setupPromise = (resolve: (msg: AnyMsg) => void) => {
 		const unsubscribe = delegate.subscribe(({ lastMessage }) => {
 			nextMsg = undefined;
 			unsubscribe();
