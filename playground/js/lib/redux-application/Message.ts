@@ -11,7 +11,12 @@ export interface MsgWith<P, T extends Msg.Type = Msg.Type> extends Msg<T> {
 	payload: P;
 }
 
-export type AnyMsg = Msg<any>;
+export type AnyMsg = Msg<any> & {
+	[key in string]: any;
+};
+export type UnknownMsg = Msg<Msg.Type> & {
+	[key in string]: unknown;
+};
 
 export function Msg<T extends Msg.Type, P>(type: T, payload: P): MsgWith<P, T>;
 export function Msg<T extends Msg.Type>(type: T): Msg<T>;
@@ -55,6 +60,8 @@ export namespace Msg {
 	export type Matcher<M extends Msg> = {
 		match: (message: Msg) => message is M;
 	};
+
+	export type InferMatch<M extends Matcher<any>> = M extends Matcher<infer T> ? T : never;
 
 	export function ofType<T extends string>(type: T) {
 		const builders = {

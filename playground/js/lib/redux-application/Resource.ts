@@ -1,4 +1,5 @@
-import { Msg } from "./Message";
+import { Msg, MsgGroup } from "./Message";
+import { Reducer } from "./Reducer";
 import { TaskControls } from "./Task";
 
 enum CacheStatus {
@@ -94,18 +95,27 @@ interface CacheControls<TData> extends TaskControls<CacheState<TData>> {
 	//
 }
 
-function createCache<TData, TParam = void>({}: {
+function createCache<TData, TParam = void>({
+	name,
+	fetch,
+}: {
+	name: string;
 	fetch: (param: TParam, ctl: CacheControls<CacheState<TData>>) => Promise<TData> | void;
-	tag?: string | string[];
 	lifetime?: {};
 	structure?: {};
 }) {
 	type TState = CacheState<TData>;
 	type TMsg = Msg;
 
+	const isInit = (msg: TMsg): msg is TMsg & { payload: { param: TParam } } => {
+		return false;
+	};
+
 	const getInitialState = (): TState => ({
 		keyed: {},
 	});
 
-	// const reduceCache: Reducer<TState, TMsg> = () => {};
+	const reduceCache = Reducer<TState, TMsg>((state = getInitialState(), msg) => {
+		return state;
+	});
 }

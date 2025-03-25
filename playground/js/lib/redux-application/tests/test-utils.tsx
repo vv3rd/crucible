@@ -25,7 +25,7 @@ export class Catch extends Component<
     this.state.hasError ? this.props.fallback : this.props.children;
 }
 
-export function Root({ children }: PropsWithChildren) {
+export function Boundry({ children }: PropsWithChildren) {
   return (
     <Catch fallback={<div data-testid={ErrFallbackEl} />}>
       <Suspense fallback={<div data-testid={SusFallbackEl} />}>
