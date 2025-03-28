@@ -3,17 +3,17 @@ import { Reducer } from "./Reducer";
 import { TaskControls } from "./Task";
 
 enum CacheStatus {
-	Initial,
-	Pending,
-	Receiving,
-	Failed,
-	Closed,
+    Initial,
+    Pending,
+    Receiving,
+    Failed,
+    Closed,
 }
 
 enum TaskStatus {
-	Idle,
-	Paused,
-	Running,
+    Idle,
+    Paused,
+    Running,
 }
 
 // biome-ignore format:
@@ -29,93 +29,100 @@ type DataForStatus<S extends CacheStatus, R> = CacheResultsForStatus<R>[S]["data
 type ErrorForStatus<S extends CacheStatus, R> = CacheResultsForStatus<R>[S]["error"];
 
 interface CacheMeta {
-	dataUpdatedAt: number;
-	errorUpdatedAt: number;
+    dataUpdatedAt: number;
+    errorUpdatedAt: number;
 }
 
 interface CacheLike<R> {
-	taskStatus: TaskStatus;
-	status: CacheStatus;
-	data: DataForStatus<this["status"], R>;
-	error: ErrorForStatus<this["status"], R>;
+    taskStatus: TaskStatus;
+    status: CacheStatus;
+    data: DataForStatus<this["status"], R>;
+    error: ErrorForStatus<this["status"], R>;
 }
 
 interface SomeCache<R> extends CacheLike<R>, CacheMeta {}
 
 interface InitialCache<R> extends SomeCache<R> {
-	status: CacheStatus.Initial;
+    status: CacheStatus.Initial;
 }
 interface PendingCache<R> extends SomeCache<R> {
-	status: CacheStatus.Pending;
+    status: CacheStatus.Pending;
 }
 interface ClosedCache<R> extends SomeCache<R> {
-	status: CacheStatus.Closed;
+    status: CacheStatus.Closed;
 }
 interface ReceivingCache<R> extends SomeCache<R> {
-	status: CacheStatus.Receiving;
+    status: CacheStatus.Receiving;
 }
 interface FailedCache<R> extends SomeCache<R> {
-	status: CacheStatus.Failed;
+    status: CacheStatus.Failed;
 }
 
 export type Cache<R> =
-	| InitialCache<R>
-	| PendingCache<R>
-	| ReceivingCache<R>
-	| FailedCache<R>
-	| ClosedCache<R>;
+    | InitialCache<R>
+    | PendingCache<R>
+    | ReceivingCache<R>
+    | FailedCache<R>
+    | ClosedCache<R>;
 
 namespace Cache {
-	type PredicatedBy<Fn> = Fn extends (arg: any) => arg is infer T ? T : never;
-	export const isResolved = <R>(
-		resource: Cache<R>,
-	): resource is Extract<Cache<R>, { status: CacheStatus.Receiving | CacheStatus.Closed }> => {
-		return resource.status === CacheStatus.Receiving || resource.status === CacheStatus.Closed;
-	};
+    type PredicatedBy<Fn> = Fn extends (arg: any) => arg is infer T ? T : never;
+    export const isResolved = <R>(
+        resource: Cache<R>,
+    ): resource is Extract<Cache<R>, { status: CacheStatus.Receiving | CacheStatus.Closed }> => {
+        return resource.status === CacheStatus.Receiving || resource.status === CacheStatus.Closed;
+    };
 
-	export const isSettled = <R>(
-		resource: Cache<R>,
-	): resource is Exclude<Cache<R>, { status: CacheStatus.Initial | CacheStatus.Pending }> => {
-		return resource.status !== CacheStatus.Initial && resource.status !== CacheStatus.Pending;
-	};
-	export const isPending = <R>(
-		resource: Cache<R>,
-	): resource is Exclude<Cache<R>, PredicatedBy<typeof isSettled>> => {
-		return !isSettled(resource);
-	};
+    export const isSettled = <R>(
+        resource: Cache<R>,
+    ): resource is Exclude<Cache<R>, { status: CacheStatus.Initial | CacheStatus.Pending }> => {
+        return resource.status !== CacheStatus.Initial && resource.status !== CacheStatus.Pending;
+    };
+    export const isPending = <R>(
+        resource: Cache<R>,
+    ): resource is Exclude<Cache<R>, PredicatedBy<typeof isSettled>> => {
+        return !isSettled(resource);
+    };
 }
 
 interface CacheState<TData> {
-	keyed: {
-		[key in string]: Cache<TData>;
-	};
+    keyed: {
+        [key in string]: Cache<TData>;
+    };
 }
 
 interface CacheControls<TData> extends TaskControls<CacheState<TData>> {
-	//
+    //
 }
 
 function createCache<TData, TParam = void>({
-	name,
-	fetch,
+    name,
+    fetch,
 }: {
-	name: string;
-	fetch: (param: TParam, ctl: CacheControls<CacheState<TData>>) => Promise<TData> | void;
-	lifetime?: {};
-	structure?: {};
+    name: string;
+    fetch: (param: TParam, ctl: CacheControls<CacheState<TData>>) => Promise<TData> | void;
+    lifetime?: {};
+    structure?: {};
 }) {
-	type TState = CacheState<TData>;
-	type TMsg = Msg;
+    type TState = CacheState<TData>;
+    type TMsg = Msg;
 
-	const isInit = (msg: TMsg): msg is TMsg & { payload: { param: TParam } } => {
-		return false;
-	};
+    const isInit = (msg: TMsg): msg is TMsg & { payload: { param: TParam } } => {
+        return false;
+    };
 
-	const getInitialState = (): TState => ({
-		keyed: {},
-	});
+    const getInitialState = (): TState => ({
+        keyed: {},
+    });
 
-	const reduceCache = Reducer<TState, TMsg>((state = getInitialState(), msg) => {
-		return state;
-	});
+    const reduceCache = Reducer<TState, TMsg>((state = getInitialState(), msg) => {
+        return state;
+    });
 }
+
+/*
+TODO: consider
+1. what request to prefer, the one currently pending or the one dispatched later
+2. need for manual writes to the cache and how to do with pending requests if a write occurs
+
+*/

@@ -1,8 +1,8 @@
 type MaxOperations = 10;
 
 type CalcBase<TResult, TObject, TOperator> = {
-	(...args: [left: TObject, operator: TOperator, right: TObject]): TResult;
-	(equation: Array<TObject | TOperator>): TResult;
+    (...args: [left: TObject, operator: TOperator, right: TObject]): TResult;
+    (equation: Array<TObject | TOperator>): TResult;
 };
 
 // biome-ignore format:
@@ -23,105 +23,105 @@ type Op = Operator | OperatorKey;
 type DecimalCalc = CalcOverloads<Decimal, Val, Op>;
 
 export const calc: DecimalCalc = (...equation) => {
-	if (equation.length === 1 && equation[0] instanceof Array) {
-		equation = equation[0] as typeof equation;
-	}
-	let left = valueAt(0);
-	let right: Decimal;
-	let operator: Operator;
-	for (let i = 1; i < equation.length; i += 2) {
-		operator = operatorAt(i);
-		right = valueAt(i + 1);
-		left = operator(left, right);
-	}
-	return left;
+    if (equation.length === 1 && equation[0] instanceof Array) {
+        equation = equation[0] as typeof equation;
+    }
+    let left = valueAt(0);
+    let right: Decimal;
+    let operator: Operator;
+    for (let i = 1; i < equation.length; i += 2) {
+        operator = operatorAt(i);
+        right = valueAt(i + 1);
+        left = operator(left, right);
+    }
+    return left;
 
-	function valueAt(idx: number) {
-		return Decimal(equation[idx] as Val);
-	}
-	function operatorAt(idx: number) {
-		let op = equation[idx] as Op;
-		if (typeof op === "string") {
-			op = operators[op];
-		}
-		return op;
-	}
+    function valueAt(idx: number) {
+        return Decimal(equation[idx] as Val);
+    }
+    function operatorAt(idx: number) {
+        let op = equation[idx] as Op;
+        if (typeof op === "string") {
+            op = operators[op];
+        }
+        return op;
+    }
 };
 
 export interface Operator {
-	T?: Decimal;
-	(left: {} & this["T"], right: {} & this["T"]): {} & this["T"];
+    T?: Decimal;
+    (left: {} & this["T"], right: {} & this["T"]): {} & this["T"];
 }
 
 export interface Decimal {
-	readonly int: bigint;
-	readonly dec: bigint;
-	readonly pow: number;
+    readonly int: bigint;
+    readonly dec: bigint;
+    readonly pow: number;
 }
 
 export function Decimal(input: number | string | Decimal): Decimal {
-	if (typeof input === "object") {
-		return input;
-	}
-	let int: bigint;
-	let dec: bigint;
-	let pow: number;
-	if (typeof input === "number") {
-		let integerPart = input | 0;
-		let decimalPart = input - integerPart;
-		int = BigInt(integerPart);
-		pow = 0;
-		while (!Number.isInteger(decimalPart)) {
-			decimalPart *= 10;
-			pow++;
-		}
-		dec = BigInt(decimalPart);
-	} else {
-		let [integerPart, decimalPart] = input.split(".");
-		int = BigInt(integerPart || "0");
-		dec = BigInt(decimalPart || "0");
-		pow = decimalPart?.length ?? 0;
-	}
+    if (typeof input === "object") {
+        return input;
+    }
+    let int: bigint;
+    let dec: bigint;
+    let pow: number;
+    if (typeof input === "number") {
+        let integerPart = input | 0;
+        let decimalPart = input - integerPart;
+        int = BigInt(integerPart);
+        pow = 0;
+        while (!Number.isInteger(decimalPart)) {
+            decimalPart *= 10;
+            pow++;
+        }
+        dec = BigInt(decimalPart);
+    } else {
+        let [integerPart, decimalPart] = input.split(".");
+        int = BigInt(integerPart || "0");
+        dec = BigInt(decimalPart || "0");
+        pow = decimalPart?.length ?? 0;
+    }
 
-	const result = {
-		int,
-		pow,
-		dec,
-	};
-	return result;
+    const result = {
+        int,
+        pow,
+        dec,
+    };
+    return result;
 }
 
 export const plus: Operator = (l, r) => {
-	let pow = Math.max(l.pow, r.pow);
-	r = scaleUp(r, pow);
-	l = scaleUp(l, pow);
-	return {
-		int: l.int + r.int,
-		dec: l.dec + r.dec,
-		pow,
-	};
+    let pow = Math.max(l.pow, r.pow);
+    r = scaleUp(r, pow);
+    l = scaleUp(l, pow);
+    return {
+        int: l.int + r.int,
+        dec: l.dec + r.dec,
+        pow,
+    };
 };
 
 export const minus: Operator = (l, r) => {
-	let pow = l.pow;
-	if (l.pow < r.pow) r = scaleUp(r, l.pow);
-	if (r.pow < l.pow) l = scaleUp(l, (pow = r.pow));
-	return {
-		int: l.int - r.int,
-		dec: l.dec - r.dec,
-		pow,
-	};
+    let pow = l.pow;
+    if (l.pow < r.pow) r = scaleUp(r, l.pow);
+    if (r.pow < l.pow) l = scaleUp(l, (pow = r.pow));
+    return {
+        int: l.int - r.int,
+        dec: l.dec - r.dec,
+        pow,
+    };
 };
 
 export const times: Operator = (l, r) => {
-	if (l.int === 0n || r.int === 0n) {
-		return { int: 0n, dec: 0n, pow: 0 };
-	}
-	return {
-		int: l.int * r.int,
-		dec: l.dec * r.dec, // this is likely incorrect
-		pow: l.pow + r.pow,
-	};
+    if (l.int === 0n || r.int === 0n) {
+        return { int: 0n, dec: 0n, pow: 0 };
+    }
+    return {
+        int: l.int * r.int,
+        dec: l.dec * r.dec, // this is likely incorrect
+        pow: l.pow + r.pow,
+    };
 };
 
 // export const mod: Operator = (l, r) => {
@@ -133,48 +133,48 @@ export const times: Operator = (l, r) => {
 // };
 
 export const format = (Decimal.format = (decimal: Decimal) => {
-	decimal = scaleDown(decimal);
-	let string = String(decimal.int);
-	let intsEnd = string.length - decimal.pow;
-	let decs = string.slice(intsEnd);
-	let ints = string.slice(0, intsEnd) || "0";
-	if (decs !== "") {
-		ints = `${ints}.${decs}`;
-	}
-	return ints;
+    decimal = scaleDown(decimal);
+    let string = String(decimal.int);
+    let intsEnd = string.length - decimal.pow;
+    let decs = string.slice(intsEnd);
+    let ints = string.slice(0, intsEnd) || "0";
+    if (decs !== "") {
+        ints = `${ints}.${decs}`;
+    }
+    return ints;
 });
 
 export const scaleUp = (Decimal.scaleUp = (decimal: Decimal, targetPower: number): Decimal => {
-	if (decimal.pow === targetPower) {
-		return decimal;
-	}
-	let factor = BigInt(10 ** (targetPower - decimal.pow));
-	return {
-		int: decimal.int,
-		dec: decimal.dec * factor,
-		pow: targetPower,
-	};
+    if (decimal.pow === targetPower) {
+        return decimal;
+    }
+    let factor = BigInt(10 ** (targetPower - decimal.pow));
+    return {
+        int: decimal.int,
+        dec: decimal.dec * factor,
+        pow: targetPower,
+    };
 });
 
 export const scaleDown = (Decimal.scaleDown = (decimal: Decimal): Decimal => {
-	if (decimal.pow === 0) {
-		return decimal;
-	}
-	let { int, pow } = decimal;
-	while (int % 10n === 0n) {
-		int = int / 10n;
-		pow--;
-	}
-	// @ts-expect-error
-	return { int, pow };
+    if (decimal.pow === 0) {
+        return decimal;
+    }
+    let { int, pow } = decimal;
+    while (int % 10n === 0n) {
+        int = int / 10n;
+        pow--;
+    }
+    // @ts-expect-error
+    return { int, pow };
 });
 
 type OperatorKey = keyof typeof operators;
 const operators = {
-	"+": plus,
-	"-": minus,
-	"*": times,
-	// "%": mod,
+    "+": plus,
+    "-": minus,
+    "*": times,
+    // "%": mod,
 };
 
 // type Arr = Array<Literal | Op>;
