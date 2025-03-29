@@ -3,18 +3,20 @@ import { createWireUtils, WiredReducer, WiringRoot } from "./Wire";
 import { TaskScheduler } from "./Task";
 import { Msg } from "./Message";
 import { useReducer } from "react";
+import { useSelector } from "./React";
+import { Store } from "./Store";
 
 export interface Atom<TValue, TMsg extends Msg> {
     address: string;
     reducer: Reducer<TValue, AtomMsg<TMsg>>;
     envelope: (message: TMsg) => AtomMsg.Envelope<TMsg>;
-    select: (root: WiringRoot) => Atom.Out<TValue, TMsg>;
+    select: (root: WiringRoot) => Atom.Handle<TValue, TMsg>;
     // TODO: consider if somewhere here must be an .address
     // method to send msg to this specific atom
 }
 
 export interface DerivedAtom<TValue> {
-    select: (root: WiringRoot) => Atom.DerivedOut<TValue>;
+    select: (root: WiringRoot) => Atom.DerivedHandle<TValue>;
 }
 
 export function Atom<TValue, TMsg extends Msg>(
@@ -23,7 +25,7 @@ export function Atom<TValue, TMsg extends Msg>(
     customContext = Atom.defaultContext,
 ): Atom<TValue, TMsg> {
     const ctx = customContext;
-    let cache: Atom.Out<TValue, TMsg> | undefined;
+    let cache: Atom.Handle<TValue, TMsg> | undefined;
     const self: Atom<TValue, TMsg> = {
         address: address,
         reducer: reducer,
@@ -59,14 +61,14 @@ export namespace Atom {
     export interface SourcesArray extends Array<AnyAtom> {}
     export interface SourcesSet extends Set<AnyAtom> {}
 
-    export interface DerivedOut<TValue> {
+    export interface DerivedHandle<TValue> {
         value: TValue;
         sources: Sources;
         mount: () => AtomMsg.Mount;
         unmount: () => AtomMsg.Unmount;
     }
 
-    export interface Out<TValue, TMsg extends Msg> extends DerivedOut<TValue> {
+    export interface Handle<TValue, TMsg extends Msg> extends DerivedHandle<TValue> {
         envelope: (message: TMsg) => AtomMsg.Envelope<TMsg>;
     }
 
@@ -90,7 +92,7 @@ export namespace Atom {
         rootName: string;
     }
 
-    export const defaultRoot = createAtomsRootImpl("atoms");
+    export const defaultRoot = createAtomsRootImpl("$");
 
     export const defaultContext: Context = {
         selectRoot: Atom.defaultRoot.select,
@@ -101,19 +103,19 @@ export namespace Atom {
         getValue: (getter: <V>(atom: Atom<V, any>) => V) => T,
         context = defaultContext,
     ): DerivedAtom<T> {
-        let lastResult: DerivedOut<T> | undefined;
+        let lastHandle: DerivedHandle<T> | undefined;
         let lastSources: SourcesArray = [];
-        let lastSourcesResults: DerivedOut<any>[] = [];
+        let lastSourcesHandles: DerivedHandle<any>[] = [];
 
         return {
             select(globalState: WiringRoot) {
                 if (
-                    lastResult &&
+                    lastHandle &&
                     lastSources.some(
-                        (source, idx) => source.select(globalState) !== lastSourcesResults[idx],
+                        (source, idx) => source.select(globalState) !== lastSourcesHandles[idx],
                     )
                 ) {
-                    return lastResult;
+                    return lastHandle;
                 }
 
                 const currentSources: SourcesSet = new Set<AnyAtom>();
@@ -129,9 +131,9 @@ export namespace Atom {
                 const unmount = () => AtomMsg.unmount(currentSources, context.rootName);
 
                 lastSources = [...currentSources];
-                lastSourcesResults = lastSources.map((source) => source.select(globalState));
-                lastResult = { value, sources: currentSources, mount, unmount };
-                return lastResult;
+                lastSourcesHandles = lastSources.map((source) => source.select(globalState));
+                lastHandle = { value, sources: currentSources, mount, unmount };
+                return lastHandle;
             },
         };
     }
@@ -270,10 +272,37 @@ function createAtomsRootImpl(rootName: string) {
     };
 }
 
+type AnyStore = Store<any, any>;
+
+const MountsCounter = new WeakMap<AnyStore, WeakMap<AnyAtom, number>>();
+
+function getMountsCounterImpl(store: AnyStore, atom: AnyAtom) {
+    let trackerForThisStore = MountsCounter.get(store);
+    if (trackerForThisStore === undefined) {
+        trackerForThisStore = new WeakMap();
+        MountsCounter.set(store, trackerForThisStore);
+    }
+    let thisAtomMounts = trackerForThisStore.get(atom);
+    if (thisAtomMounts === undefined) {
+        thisAtomMounts = 0;
+        trackerForThisStore.set(atom, thisAtomMounts);
+    }
+    return [thisAtomMounts, trackerForThisStore] as const;
+}
+
+function getMountsCount(store: AnyStore, atom: AnyAtom) {
+    const [currentCount] = getMountsCounterImpl(store, atom);
+    return currentCount;
+}
+
+function setMountsCount(store: AnyStore, atom: AnyAtom, setter: (current: number) => number) {
+    const [current, counter] = getMountsCounterImpl(store, atom);
+    const nextValue = setter(current);
+    counter.set(atom, nextValue);
+    return nextValue;
+}
+
 export function useAtom<T, M extends Msg>(atom: Atom<T, M>) {
-    const initialState = Reducer.initialize(atom.reducer);
-    const [state, dispatch] = useReducer(
-        (state: T, msg: M) => atom.reducer(state, msg, () => {}),
-        initialState,
-    );
+    const atomHandle = useSelector(atom.select);
+    atomHandle.sources;
 }
