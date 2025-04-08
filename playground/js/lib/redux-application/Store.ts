@@ -17,6 +17,8 @@ export interface ListenerCallback {
 
 export interface Store<TState, TMsg extends Msg> {
     dispatch: Dispatch<TMsg>;
+    execute: <T>(task: Task<T, TState, TMsg>, ...otherTasks: Task<void, TState, TMsg>[]) => T;
+    catch: (...errors: unknown[]) => void;
     getState: () => TState;
     subscribe: (listener: ListenerCallback) => Subscription;
     unsubscribe: (listener: AnyFn) => void;
@@ -41,7 +43,7 @@ type Internals<TState, TMsg extends Msg> = {
 };
 
 type Executor<TState, TMsg extends Msg> = (
-    tasks: Array<Task<TState, void>>,
+    tasks: Array<Task<void, TState>>,
     accessStore: () => Store<TState, TMsg>,
 ) => void;
 
@@ -94,8 +96,31 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
                 tpb.lockScheduler();
             }
             lastMsg = msg;
-            executeTasks([...listeners], getFinalStore);
-            executeTasks(tpb.getTasks(), getFinalStore);
+            const { execute } = getFinalStore();
+            const noop = () => {};
+            execute(noop, ...listeners);
+            execute(noop, ...tpb.getTasks());
+        },
+
+        execute(task, ...otherTasks) {
+            const errors: unknown[] = [];
+            const store = getFinalStore();
+            const result = Task.run(task, store)
+            for (const func of otherTasks) {
+                try {
+                    Task.run(func, store);
+                } catch (err) {
+                    errors.push(err);
+                }
+            }
+            store.catch(...errors);
+            return result
+        },
+
+        catch(...errors) {
+            for (const error of errors) {
+                console.error(error)
+            }
         },
 
         subscribe(listener) {
@@ -132,6 +157,8 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
     // biome-ignore format: better visual
     return {
 		dispatch:    (...a) => delegate.dispatch(...a),
+		execute:     (...a) => delegate.execute(...a),
+		catch:       (...a) => delegate.catch(...a),
 		getState:        () => delegate.getState(),
 		subscribe:   (...a) => delegate.subscribe(...a),
 		unsubscribe: (...a) => delegate.unsubscribe(...a),
@@ -143,6 +170,8 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 // biome-ignore format: saves space
 const lockedStore: Store<any, any> = {
     dispatch() { throw new Error(FUCK_STORE_LOCKED); },
+    execute() { throw new Error(FUCK_STORE_LOCKED); },
+    catch() { throw new Error(FUCK_STORE_LOCKED); },
     getState() { throw new Error(FUCK_STORE_LOCKED); },
     subscribe() { throw new Error(FUCK_STORE_LOCKED); },
     unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },

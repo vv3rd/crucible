@@ -3,13 +3,13 @@ import { AnyMsg, Msg } from "./Message";
 import { Store } from "./Store";
 
 export type AnyTask<R = any> = Task<any, R>;
-export interface Task<TState, TResult> {
+export interface Task<TResult, TState, TMsg extends Msg = AnyMsg> {
     (Task_taskCtl: TaskControls<TState>): TResult;
 }
 
 export namespace Task {
     export const pool = <TState, TResult = void>() => {
-        const tasks: Task<TState, TResult>[] = [];
+        const tasks: Task<TResult, TState>[] = [];
         let scheduler = tasks.push.bind(tasks);
         const lockedScheduler = () => {
             throw new Error(FUCK_TASK_POOL_CLOSED);
@@ -27,9 +27,12 @@ export namespace Task {
             },
         };
     };
-    export type InferState<R> = R extends Task<infer S, any> ? S : never;
+    export type InferState<R> = R extends Task<any, infer S> ? S : never;
 
-    export const run = <TState>(task: Task<TState, unknown>, store: Store<TState, AnyMsg>) => {
+    export const run = <T, TState, TMsg extends Msg>(
+        task: Task<T, TState>,
+        store: Store<TState, TMsg>,
+    ) => {
         const ac = new AbortController();
         const signal = ac.signal;
         const ctl: TaskControls<TState> = {
@@ -41,13 +44,16 @@ export namespace Task {
                 return unsubscribe;
             },
         };
-        (async () => {
-            try {
-                await task(ctl);
-            } finally {
-                ac.abort();
+
+        try {
+            const result = task(ctl);
+            if (result instanceof Promise) {
+                result.catch(() => ac.abort());
             }
-        })();
+            return result;
+        } finally {
+            ac.abort();
+        }
     };
 }
 
@@ -60,15 +66,17 @@ export namespace TaskControls {
         ctl: TaskControls<TStateA>,
         selector: (state: TStateA) => TStateB,
     ): TaskControls<TStateB> => {
-        return {
+        const self: TaskControls<TStateB> = {
             ...ctl,
             getState: () => selector(ctl.getState()),
+            execute: (task) => ctl.execute(() => task(self)),
         };
+        return self;
     };
 }
 
 export interface TaskScheduler<TState> {
-    (TaskScheduler_taskFn: Task<TState, void>): void;
+    (TaskScheduler_taskFn: Task<void, TState>): void;
 }
 export namespace TaskScheduler {
     export const scoped =
