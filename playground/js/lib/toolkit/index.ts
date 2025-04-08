@@ -4,3 +4,4 @@ export { runOnce } from "./runOnce";
 export { sortStringify } from "./sortStringify";
 export { isPlainObject } from "./isPlainObject";
 export { match } from "./match";
+export { tryCatch } from "./tryCatch";

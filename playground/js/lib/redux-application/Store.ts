@@ -1,29 +1,30 @@
 import { Reducer } from "./Reducer";
 import { Task } from "./Task";
-import { identity } from "../toolkit";
-import { FUCK_INTERNALS_USED, FUCK_STORE_LOCKED } from "./Errors.ts";
-import { AnyFn } from "./Fn.ts";
-import { AnyMsg, Msg } from "./Message.ts";
+import { identity, tryCatch } from "../toolkit";
+import { FUCK_STORE_LOCKED, FUCK_TASK_EXITED } from "./Errors.ts";
+import { AnyFn, VoidFn } from "./Fn.ts";
+import { Msg } from "./Message.ts";
 
-export interface Subscription {
-    // extends Disposable {
-    // unsubscribe(): void;
+export interface Subscription extends Disposable {
+    addTeardown(teardown: VoidFn): void;
     (): void;
 }
 
-export interface ListenerCallback {
-    (notifier: { lastMessage: () => Msg }): void;
+export interface ListenerCallback<TMsg> {
+    (notifier: { lastMessage: () => TMsg }): void;
 }
 
 export interface Store<TState, TMsg extends Msg> {
     dispatch: Dispatch<TMsg>;
-    execute: <T>(task: Task<T, TState, TMsg>, ...otherTasks: Task<void, TState, TMsg>[]) => T;
-    catch: (...errors: unknown[]) => void;
     getState: () => TState;
-    subscribe: (listener: ListenerCallback) => Subscription;
+    subscribe: (listener: ListenerCallback<TMsg>) => Subscription;
     unsubscribe: (listener: AnyFn) => void;
+
+    execute: <T>(task: Task<T, TState, TMsg>) => T;
+    catch: (...errors: unknown[]) => void;
+
     nextMessage: () => Promise<Msg>;
-    lastMessage: () => Msg;
+    lastMessage: () => TMsg;
 }
 
 export interface Dispatch<TMsg> {
@@ -34,106 +35,106 @@ type StoreOverlay = (creator: InnerStoreCreator) => InnerStoreCreator;
 
 type InnerStoreCreator = <TState, TMsg extends Msg>(
     reducer: Reducer<TState, TMsg>,
-    internals: Internals<TState, TMsg>,
+    getFinalStore: () => Store<TState, TMsg>,
 ) => Store<TState, TMsg>;
-
-type Internals<TState, TMsg extends Msg> = {
-    tasksExecutor: Executor<TState, TMsg>;
-    storeAccessor: () => Store<TState, TMsg>;
-};
-
-type Executor<TState, TMsg extends Msg> = (
-    tasks: Array<Task<void, TState>>,
-    accessStore: () => Store<TState, TMsg>,
-) => void;
 
 export namespace Store {
     export const create = createStore;
+
+    export const scoped = <TStateA, TStateB, TMsg extends Msg>(
+        base: Store<TStateA, TMsg>,
+        selector: (state: TStateA) => TStateB,
+    ): Store<TStateB, TMsg> => {
+        const self: Store<TStateB, TMsg> = {
+            ...base,
+            getState: () => selector(base.getState()),
+            execute: (task) => base.execute((_, signal) => task(self, signal)),
+        };
+        return self;
+    };
 }
 
 export function createStore<TState, TMsg extends Msg>(
     reducer: Reducer<TState, TMsg>,
     overlay: StoreOverlay = identity,
-): Store<TState, TMsg> {
-    let storeAccessor = (): typeof store => {
-        try {
-            return store;
-        } catch (error) {
-            throw new Error(FUCK_INTERNALS_USED, { cause: error });
-        }
-    };
-    const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, {
-        storeAccessor: () => storeAccessor(),
-        tasksExecutor: defaultExecutor,
-    });
-    storeAccessor = () => store;
+) {
+    const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, () => store);
     return store;
 }
 
-const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
+const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
     type TState = Reducer.InferState<typeof reducer>;
     type TMsg = Reducer.InferMsg<typeof reducer>;
-    const {
-        //
-        tasksExecutor: executeTasks,
-        storeAccessor: getFinalStore,
-    } = internals;
-    const listeners: Set<ListenerCallback> = new Set();
 
     let state: TState = Reducer.initialize(reducer);
+
+    const listeners: Set<ListenerCallback<TMsg>> = new Set();
 
     const activeStore: Store<TState, TMsg> = {
         dispatch(msg) {
             if (msg == null) {
                 return;
             }
-            const tpb = Task.pool<TState, void>();
+            const tasks = Task.pool<void, TState, TMsg>();
             try {
                 delegate = lockedStore;
-                state = reducer(state, msg, tpb.getScheduler());
+                state = reducer(state, msg, tasks.getScheduler());
             } finally {
                 delegate = activeStore;
-                tpb.lockScheduler();
+                tasks.lockScheduler();
             }
             lastMsg = msg;
-            const { execute } = getFinalStore();
-            const noop = () => {};
-            execute(noop, ...listeners);
-            execute(noop, ...tpb.getTasks());
-        },
 
-        execute(task, ...otherTasks) {
+            const finalStore = getFinalStore();
             const errors: unknown[] = [];
-            const store = getFinalStore();
-            const result = Task.run(task, store)
-            for (const func of otherTasks) {
+            for (const task of [...listeners, ...tasks]) {
                 try {
-                    Task.run(func, store);
+                    finalStore.execute(task);
                 } catch (err) {
                     errors.push(err);
                 }
             }
-            store.catch(...errors);
-            return result
-        },
-
-        catch(...errors) {
-            for (const error of errors) {
-                console.error(error)
+            if (errors.length) {
+                finalStore.catch(...errors);
             }
         },
-
+        getState() {
+            return state;
+        },
         subscribe(listener) {
             listeners.add(listener);
-            const unsubscribe = () => delegate.unsubscribe(listener);
+            const teardowns = [() => delegate.unsubscribe(listener)];
+            const unsubscribe = () => teardowns.forEach((teardown) => teardown());
+            unsubscribe.addTeardown = teardowns.push.bind(teardowns);
+            unsubscribe[Symbol.dispose] = unsubscribe;
             return unsubscribe;
         },
         unsubscribe(listener) {
             listeners.delete(listener);
         },
-        getState() {
-            return state;
+
+        execute(task) {
+            const ac = new AbortController();
+            let self = getFinalStore();
+            self = {
+                ...self,
+                subscribe(listener) {
+                    const unsubscribe = self.subscribe(listener);
+                    ac.signal.addEventListener("abort", unsubscribe);
+                    return unsubscribe;
+                },
+            };
+            const out = tryCatch(() => task(self, ac.signal), {
+                finally: () => ac.abort(),
+            });
+            return out;
         },
+        catch(...errors) {
+            for (const error of errors) {
+                reportError(error);
+            }
+        },
+
         lastMessage() {
             return lastMsg;
         },
@@ -143,16 +144,31 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
     };
 
     let lastMsg: TMsg;
-    let nextMsg: Promise<AnyMsg> | undefined;
-    const setupPromise = (resolve: (msg: AnyMsg) => void) => {
+    let nextMsg: Promise<TMsg> | undefined;
+    const setupPromise = (resolve: (msg: TMsg) => void, reject: (reason: unknown) => void) => {
         const unsubscribe = delegate.subscribe(({ lastMessage }) => {
             nextMsg = undefined;
             unsubscribe();
             resolve(lastMessage());
         });
+        unsubscribe.addTeardown(() => {
+            reject(new Error(FUCK_TASK_EXITED));
+        });
     };
 
     let delegate: Store<TState, TMsg> = activeStore;
+
+    // biome-ignore format: saves space
+    const lockedStore: Store<TState, TMsg> = {
+        dispatch() { throw new Error(FUCK_STORE_LOCKED); },
+        execute() { throw new Error(FUCK_STORE_LOCKED); },
+        catch() { throw new Error(FUCK_STORE_LOCKED); },
+        getState() { throw new Error(FUCK_STORE_LOCKED); },
+        subscribe() { throw new Error(FUCK_STORE_LOCKED); },
+        unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },
+        nextMessage() { throw new Error(FUCK_STORE_LOCKED); },
+        lastMessage() { throw new Error(FUCK_STORE_LOCKED); }
+    };
 
     // biome-ignore format: better visual
     return {
@@ -165,32 +181,4 @@ const createStoreImpl: InnerStoreCreator = (reducer, internals) => {
 		lastMessage:     () => delegate.lastMessage(),
 		nextMessage:     () => delegate.nextMessage(),
 	};
-};
-
-// biome-ignore format: saves space
-const lockedStore: Store<any, any> = {
-    dispatch() { throw new Error(FUCK_STORE_LOCKED); },
-    execute() { throw new Error(FUCK_STORE_LOCKED); },
-    catch() { throw new Error(FUCK_STORE_LOCKED); },
-    getState() { throw new Error(FUCK_STORE_LOCKED); },
-    subscribe() { throw new Error(FUCK_STORE_LOCKED); },
-    unsubscribe() { throw new Error(FUCK_STORE_LOCKED); },
-    nextMessage() { throw new Error(FUCK_STORE_LOCKED); },
-    lastMessage() { throw new Error(FUCK_STORE_LOCKED); }
-};
-
-const defaultExecutor: Executor<any, any> = (tasks, getStore) => {
-    const onError = console.error;
-    const errors: unknown[] = [];
-    const store = getStore();
-    for (const func of tasks) {
-        try {
-            Task.run(func, store);
-        } catch (err) {
-            errors.push(err);
-        }
-    }
-    for (const error of errors) {
-        onError(error);
-    }
 };

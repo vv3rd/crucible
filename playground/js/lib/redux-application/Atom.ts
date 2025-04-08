@@ -185,7 +185,7 @@ export namespace AtomMsg {
 function createAtomsRootImpl(rootName: string) {
     type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.Envelope<any>;
 
-    const [connectWire, selectIt] = createWireUtils<Atom.Root>();
+    const [connectWire, selectIt] = createWireUtils<Atom.Root, AtomRootMsg>();
 
     const atomsRootReducer: Reducer<Atom.Root, AtomRootMsg> = (
         rootState = { __atomValues: {}, __atomReducers: {} },

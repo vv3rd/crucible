@@ -2,22 +2,21 @@ import { FUCK_TASK_POOL_CLOSED } from "./Errors";
 import { AnyMsg, Msg } from "./Message";
 import { Store } from "./Store";
 
-export type AnyTask<R = any> = Task<any, R>;
-export interface Task<TResult, TState, TMsg extends Msg = AnyMsg> {
-    (Task_taskCtl: TaskControls<TState>): TResult;
+export type AnyTask<R = any> = Task<any, R, AnyMsg>;
+export interface Task<TResult, TState, TMsg extends Msg> {
+    (Task_store: Store<TState, TMsg>, signal: AbortSignal): TResult;
 }
 
 export namespace Task {
-    export const pool = <TState, TResult = void>() => {
-        const tasks: Task<TResult, TState>[] = [];
+    export const pool = <TResult, TState, TMsg extends Msg>() => {
+        const tasks: Task<TResult, TState, TMsg>[] = [];
         let scheduler = tasks.push.bind(tasks);
         const lockedScheduler = () => {
             throw new Error(FUCK_TASK_POOL_CLOSED);
         };
         return {
-            getTasks() {
-                scheduler = lockedScheduler;
-                return [...tasks];
+            [Symbol.iterator]() {
+                return tasks[Symbol.iterator]();
             },
             getScheduler(): typeof scheduler {
                 return (task) => scheduler(task);
@@ -27,77 +26,31 @@ export namespace Task {
             },
         };
     };
-    export type InferState<R> = R extends Task<any, infer S> ? S : never;
-
-    export const run = <T, TState, TMsg extends Msg>(
-        task: Task<T, TState>,
-        store: Store<TState, TMsg>,
-    ) => {
-        const ac = new AbortController();
-        const signal = ac.signal;
-        const ctl: TaskControls<TState> = {
-            ...store,
-            signal,
-            subscribe(listener) {
-                const unsubscribe = store.subscribe(listener);
-                signal.addEventListener("abort", unsubscribe);
-                return unsubscribe;
-            },
-        };
-
-        try {
-            const result = task(ctl);
-            if (result instanceof Promise) {
-                result.catch(() => ac.abort());
-            }
-            return result;
-        } finally {
-            ac.abort();
-        }
-    };
 }
 
-export interface TaskControls<TState> extends Store<TState, AnyMsg> {
-    signal: AbortSignal;
-}
-
-export namespace TaskControls {
-    export const scoped = <TStateA, TStateB>(
-        ctl: TaskControls<TStateA>,
-        selector: (state: TStateA) => TStateB,
-    ): TaskControls<TStateB> => {
-        const self: TaskControls<TStateB> = {
-            ...ctl,
-            getState: () => selector(ctl.getState()),
-            execute: (task) => ctl.execute(() => task(self)),
-        };
-        return self;
-    };
-}
-
-export interface TaskScheduler<TState> {
-    (TaskScheduler_taskFn: Task<void, TState>): void;
+export interface TaskScheduler<TState, TMsg extends Msg> {
+    (TaskScheduler_taskFn: Task<void, TState, TMsg>): void;
 }
 export namespace TaskScheduler {
     export const scoped =
-        <TStateA, TStateB>(
-            unscopedScheduler: TaskScheduler<TStateA>,
+        <TStateA, TStateB, TMsg extends Msg>(
+            unscopedScheduler: TaskScheduler<TStateA, TMsg>,
             selector: (state: TStateA) => TStateB,
-        ): TaskScheduler<TStateB> =>
+        ): TaskScheduler<TStateB, TMsg> =>
         (taskFn) => {
-            unscopedScheduler((ctl) => taskFn(TaskControls.scoped(ctl, selector)));
+            unscopedScheduler((store, signal) => taskFn(Store.scoped(store, selector), signal));
         };
 }
 
-export function taskExt<T>(ctl: TaskControls<T>) {
+export function taskExt<T, TMsg extends Msg>(store: Store<T, TMsg>) {
     async function condition(checker: (state: T) => boolean): Promise<T>;
 
     async function condition<U extends T>(checker: (state: T) => state is U): Promise<U>;
     async function condition(checker: (state: T) => boolean): Promise<T> {
-        let state = ctl.getState();
+        let state = store.getState();
         while (!checker(state)) {
-            await ctl.nextMessage();
-            state = ctl.getState();
+            await store.nextMessage();
+            state = store.getState();
         }
         return state;
     }
@@ -105,7 +58,7 @@ export function taskExt<T>(ctl: TaskControls<T>) {
     async function take<T extends Msg>(matcher: Msg.Matcher<T>): Promise<T> {
         let awaitedMessage: T | undefined;
         while (awaitedMessage === undefined) {
-            const msg = await ctl.nextMessage();
+            const msg = await store.nextMessage();
             if (matcher.match(msg)) {
                 awaitedMessage = msg;
             }
@@ -114,11 +67,11 @@ export function taskExt<T>(ctl: TaskControls<T>) {
     }
 
     async function* stream(): AsyncGenerator<Msg, void, void> {
-        while (true) yield await ctl.nextMessage();
+        while (true) yield await store.nextMessage();
     }
 
     return {
-        ...ctl,
+        ...store,
         condition,
         take,
         stream,

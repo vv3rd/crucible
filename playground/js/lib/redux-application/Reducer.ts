@@ -7,7 +7,7 @@ export interface Reducer<TState, TMsg extends Msg> {
     (
         Reducer_currentState: TState | undefined,
         Reducer_message: TMsg,
-        Reducer_taskScheduler: TaskScheduler<TState>,
+        Reducer_taskScheduler: TaskScheduler<TState, TMsg>,
     ): TState;
 }
 
@@ -56,7 +56,7 @@ function composeReducersImpl(reducersObject: Record<string, AnyReducer>) {
     return function composedReducer(
         current: TState | undefined,
         action: TMsg,
-        schedule: TaskScheduler<TState>,
+        schedule: TaskScheduler<TState, TMsg>,
     ): TState {
         let next: TState = current;
         for (let [key, reducer] of reducers) {
@@ -78,7 +78,7 @@ interface Accessor<T> {
     (): T;
     (Accessor_state: T | Partial<T>): T;
     (Accessor_update: (state: T) => T | Partial<T>): T;
-    do: TaskScheduler<T>;
+    do: TaskScheduler<T, any>;
 }
 
 type Updaters<T> = {

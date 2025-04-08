@@ -16,10 +16,8 @@ test("just stuff in general", () => {
 
 test("overlay", () => {
     const store = createStore(reducer, (createStore) => {
-        return (reducer, internals) => {
-            const store = createStore(reducer, {
-                ...internals,
-            });
+        return (reducer, final) => {
+            const store = createStore(reducer, final);
 
             return {
                 ...store,
