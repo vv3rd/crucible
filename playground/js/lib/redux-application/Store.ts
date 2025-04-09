@@ -19,7 +19,7 @@ export interface Store<TState, TMsg extends Msg> {
 }
 
 export interface Subscription extends Disposable {
-    addTeardown(teardown: VoidFn): void;
+    addCleanup(teardown: VoidFn): void;
     (): void;
 }
 
@@ -27,12 +27,16 @@ export interface MsgStream<TState, TMsg extends Msg> extends Subscription, Async
     nextMessage: () => Promise<TMsg>;
     lastMessage: () => TMsg;
     condition<U extends TState>(checker: (state: TState) => state is U): Promise<U>;
-    cindition(checker: (state: TState) => boolean): Promise<TState>;
+    condition(checker: (state: TState) => boolean): Promise<TState>;
     take<T extends Msg>(matcher: Msg.Matcher<T>): Promise<T>;
 }
 
 export interface ListenerCallback {
     (): void;
+}
+export interface Listener {
+    notify: ListenerCallback;
+    cleanups: Array<() => void>
 }
 
 export interface Dispatch<TMsg> {
@@ -76,46 +80,51 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 
     let state: TState = Reducer.initialize(reducer);
 
-    const listeners: Set<ListenerCallback> = new Set();
+    const listeners = new Map<ListenerCallback, Listener>();
 
     const activeStore: Store<TState, TMsg> = {
         dispatch(msg) {
             if (msg == null) {
                 return;
             }
-            const tasks = Task.pool<void, TState, TMsg>();
+            const taskPool = Task.pool<void, TState, TMsg>();
             try {
                 delegate = lockedStore;
-                state = reducer(state, msg, tasks.getScheduler());
+                state = reducer(state, msg, taskPool.getScheduler());
             } finally {
                 delegate = activeStore;
-                tasks.lockScheduler();
+                taskPool.lockScheduler();
             }
             lastMsg = msg;
 
             const self = getFinalStore();
-            const errors: unknown[] = [];
+            const errs: unknown[] = [];
             // biome-ignore format:
-            for (const listener of listeners) try { listener() } catch (e) { errors.push(e) }
+            for (const listener of listeners.values()) try { listener.notify() } catch (e) { errs.push(e) }
             // biome-ignore format:
-            for (const task of tasks) try { self.execute(task) } catch (e) { errors.push(e) }
-            if (errors.length) {
-                self.catch(...errors);
+            for (const task of taskPool) try { self.execute(task) } catch (e) { errs.push(e) }
+            if (errs.length) {
+                self.catch(...errs);
             }
         },
         getState() {
             return state;
         },
-        subscribe(listener) {
-            listeners.add(listener);
-            const teardowns = [() => delegate.unsubscribe(listener)];
-            const unsubscribe = () => teardowns.forEach((teardown) => teardown());
-            unsubscribe.addTeardown = teardowns.push.bind(teardowns);
-            unsubscribe[Symbol.dispose] = unsubscribe;
-            return unsubscribe;
+        subscribe(callback) {
+            const self = getFinalStore()
+            const listener: Listener = { notify: callback, cleanups: [] }
+            const unsub: Subscription = () => self.unsubscribe(callback);
+            unsub.addCleanup = cleanup => listener.cleanups.push(cleanup);
+            unsub[Symbol.dispose] = unsub;
+            listeners.set(callback, listener);
+            return unsub;
         },
-        unsubscribe(listener) {
-            listeners.delete(listener);
+        unsubscribe(callback) {
+            const listener = listeners.get(callback);
+            if (listener) {
+                listeners.delete(callback)
+                listener.cleanups.forEach(fn => fn())
+            }
         },
 
         execute(task) {
@@ -155,7 +164,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
             unsubscribe();
             resolve(lastMsg);
         });
-        unsubscribe.addTeardown(() => {
+        unsubscribe.addCleanup(() => {
             reject(new Error(FUCK_TASK_EXITED));
         });
     };
