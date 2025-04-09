@@ -104,10 +104,10 @@ export function createWiringRoot<TState extends object, TMsg extends Msg>(
 const stubTaskControls: Store<any, any> = {
     execute() { throw new Error(FUCK_TASK_NOT_REAL); },
     catch() { throw new Error(FUCK_TASK_NOT_REAL); },
-    lastMessage() { throw new Error(FUCK_TASK_NOT_REAL); },
     dispatch() { throw new Error(FUCK_TASK_NOT_REAL); },
-    nextMessage() { throw new Error(FUCK_TASK_NOT_REAL); },
     getState() { throw new Error(FUCK_TASK_NOT_REAL); },
     subscribe() { throw new Error(FUCK_TASK_NOT_REAL); },
     unsubscribe() { throw new Error(FUCK_TASK_NOT_REAL); }
+    // lastMessage() { throw new Error(FUCK_TASK_NOT_REAL); },
+    // nextMessage() { throw new Error(FUCK_TASK_NOT_REAL); },
 };

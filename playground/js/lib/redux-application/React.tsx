@@ -6,6 +6,7 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import { Store } from "./Store";
+import { AnyFn } from "./Fn";
 
 const StoreContext = createContext<Store<any, any> | null>(null);
 
@@ -35,8 +36,12 @@ export function useSelector<T, S extends keyof StoreRegistry = "global">(
   selector: (state: StoreRegistry[S]) => T,
 ) {
   const store = useStore();
-  const snapshot = useCallback(() => selector(store.getState()), [selector]);
-  const value = useSyncExternalStore(store.subscribe, snapshot, snapshot);
+  const snapshot = useCallback(() => selector(store.getState()), [store, selector]);
+  const value = useSyncExternalStore(
+    useCallback((fn) => store.subscribe(fn).unsubscribe, [store]),
+    snapshot,
+    snapshot,
+  );
   return value;
 }
 

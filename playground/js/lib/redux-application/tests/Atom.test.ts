@@ -10,11 +10,12 @@ describe.only("Atom", () => {
             createWiringRoot(
                 Reducer.compose({
                     $atomics: Atom.defaultRoot.reducer,
+                    count: Reducer.primitive(0, "setCount"),
                 }),
             ),
         );
-        store.subscribe(({ lastMessage }) => {
-            console.log(lastMessage(), store.getState());
+        const stream = store.subscribe(() => {
+            console.log(stream.lastMessage(), store.getState());
         });
 
         const foldCount = Reducer.primitive(0, "count-update");
