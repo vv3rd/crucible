@@ -5,19 +5,10 @@ import { FUCK_STORE_LOCKED, FUCK_TASK_EXITED } from "./Errors.ts";
 import { AnyFn, VoidFn } from "./Fn.ts";
 import { Msg } from "./Message.ts";
 
-export interface Subscription extends Disposable {
-    addTeardown(teardown: VoidFn): void;
-    (): void;
-}
-
-export interface ListenerCallback<TMsg> {
-    (notifier: { lastMessage: () => TMsg }): void;
-}
-
 export interface Store<TState, TMsg extends Msg> {
     dispatch: Dispatch<TMsg>;
     getState: () => TState;
-    subscribe: (listener: ListenerCallback<TMsg>) => Subscription;
+    subscribe: (listener: ListenerCallback) => Subscription;
     unsubscribe: (listener: AnyFn) => void;
 
     execute: <T>(task: Task<T, TState, TMsg>) => T;
@@ -25,6 +16,23 @@ export interface Store<TState, TMsg extends Msg> {
 
     nextMessage: () => Promise<Msg>;
     lastMessage: () => TMsg;
+}
+
+export interface Subscription extends Disposable {
+    addTeardown(teardown: VoidFn): void;
+    (): void;
+}
+
+export interface MsgStream<TState, TMsg extends Msg> extends Subscription, AsyncIterator<TMsg> {
+    nextMessage: () => Promise<TMsg>;
+    lastMessage: () => TMsg;
+    condition<U extends TState>(checker: (state: TState) => state is U): Promise<U>;
+    cindition(checker: (state: TState) => boolean): Promise<TState>;
+    take<T extends Msg>(matcher: Msg.Matcher<T>): Promise<T>;
+}
+
+export interface ListenerCallback {
+    (): void;
 }
 
 export interface Dispatch<TMsg> {
@@ -68,7 +76,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 
     let state: TState = Reducer.initialize(reducer);
 
-    const listeners: Set<ListenerCallback<TMsg>> = new Set();
+    const listeners: Set<ListenerCallback> = new Set();
 
     const activeStore: Store<TState, TMsg> = {
         dispatch(msg) {
@@ -85,17 +93,14 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
             }
             lastMsg = msg;
 
-            const finalStore = getFinalStore();
+            const self = getFinalStore();
             const errors: unknown[] = [];
-            for (const task of [...listeners, ...tasks]) {
-                try {
-                    finalStore.execute(task);
-                } catch (err) {
-                    errors.push(err);
-                }
-            }
+            // biome-ignore format:
+            for (const listener of listeners) try { listener() } catch (e) { errors.push(e) }
+            // biome-ignore format:
+            for (const task of tasks) try { self.execute(task) } catch (e) { errors.push(e) }
             if (errors.length) {
-                finalStore.catch(...errors);
+                self.catch(...errors);
             }
         },
         getState() {
@@ -124,10 +129,9 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
                     return unsubscribe;
                 },
             };
-            const out = tryCatch(() => task(self, ac.signal), {
+            return tryCatch(() => task(self, ac.signal), {
                 finally: () => ac.abort(),
             });
-            return out;
         },
         catch(...errors) {
             for (const error of errors) {
@@ -146,10 +150,10 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
     let lastMsg: TMsg;
     let nextMsg: Promise<TMsg> | undefined;
     const setupPromise = (resolve: (msg: TMsg) => void, reject: (reason: unknown) => void) => {
-        const unsubscribe = delegate.subscribe(({ lastMessage }) => {
+        const unsubscribe = delegate.subscribe(() => {
             nextMsg = undefined;
             unsubscribe();
-            resolve(lastMessage());
+            resolve(lastMsg);
         });
         unsubscribe.addTeardown(() => {
             reject(new Error(FUCK_TASK_EXITED));

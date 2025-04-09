@@ -4,25 +4,19 @@ import { Boundry } from "./test-utils";
 import { Fragment } from "react/jsx-runtime";
 
 test("render", async () => {
-    await act(() => render(<TestBed children={<TestComponent />} />));
-    expect(screen.getByTestId("content")).toBeInTheDocument();
+  await act(() => render(<TestBed children={<TestComponent />} />));
+  expect(screen.getByTestId("content")).toBeInTheDocument();
 });
 
 function TestBed({ children }: { children: React.ReactNode }) {
-    return (
-        <Boundry>
-            {/*
-             */}
-            {children}
-        </Boundry>
-    );
+  return <Boundry>{children}</Boundry>;
 }
 
 function TestComponent() {
-    return (
-        <Fragment>
-            {/*
-             */}
-        </Fragment>
-    );
+  return (
+    <Fragment>
+      {/*
+       */}
+    </Fragment>
+  );
 }

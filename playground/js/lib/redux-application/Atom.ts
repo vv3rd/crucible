@@ -1,8 +1,7 @@
 import { Reducer } from "./Reducer";
 import { createWireUtils, WiredReducer, WiringRoot } from "./Wire";
 import { TaskScheduler } from "./Task";
-import { Msg } from "./Message";
-import { useReducer } from "react";
+import { AnyMsg, Msg } from "./Message";
 import { useSelector } from "./React";
 import { Store } from "./Store";
 
@@ -81,7 +80,7 @@ export namespace Atom {
             [key: string]: Value<unknown>;
         };
         __atomReducers: {
-            [key: string]: Reducer<Value<unknown>, AtomMsg<Msg>>;
+            [key: string]: Reducer<Value<unknown>, AtomMsg<AnyMsg>>;
         };
     }
 
@@ -183,7 +182,7 @@ export namespace AtomMsg {
 }
 
 function createAtomsRootImpl(rootName: string) {
-    type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.Envelope<any>;
+    type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.Envelope<any> | AnyMsg;
 
     const [connectWire, selectIt] = createWireUtils<Atom.Root, AtomRootMsg>();
 
