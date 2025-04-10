@@ -1,7 +1,7 @@
 import { Reducer } from "./Reducer";
 import { Task, TaskOfStore } from "./Task";
-import { doNothing, identity, tryCatch } from "../toolkit";
-import { FUCK_STORE_LOCKED, FUCK_TASK_EXITED } from "./Errors.ts";
+import { doNothing, identity } from "../toolkit";
+import { FUCK_STORE_LOCKED } from "./Errors.ts";
 import { AnyFn, VoidFn } from "./Fn.ts";
 import { Msg } from "./Message.ts";
 
@@ -67,6 +67,8 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
     type TMsg = Reducer.InferMsg<typeof reducer>;
 
     let state: TState = Reducer.initialize(reducer);
+    let lastMsg: TMsg;
+    let nextMsg: PromiseWithResolvers<TMsg> = Promise.withResolvers();
 
     const listeners = new Map<ListenerCallback, Listener>();
 
@@ -88,6 +90,8 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
                 taskPool.lockScheduler();
             }
             lastMsg = msg;
+            nextMsg.resolve(msg);
+            nextMsg = Promise.withResolvers();
 
             const self = getFinalStore();
             const errs: unknown[] = [];
@@ -109,12 +113,11 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
             if (!listeners.has(callback)) {
                 listeners.set(callback, listener);
             }
-
             const unsubscribe = () => self.unsubscribe(callback);
             const base: MsgStreamBase<TMsg> = {
                 addTeardown: (fn) => listener.cleanups.push(fn),
                 lastMessage: () => lastMsg,
-                nextMessage: () => nextMsg ?? (nextMsg = new Promise(setupForNextMessage)),
+                nextMessage: () => nextMsg.promise,
                 unsubscribe: unsubscribe,
                 [Symbol.dispose]: unsubscribe,
                 [Symbol.asyncIterator]: () => MsgStreamIterator.create(base.nextMessage),
@@ -136,18 +139,17 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 
         execute(task) {
             const ac = new AbortController();
-            let self = getFinalStore();
-            self = {
-                ...self,
-                subscribe(listener) {
-                    const stream = self.subscribe(listener);
-                    ac.signal.addEventListener("abort", stream.unsubscribe);
-                    return stream;
-                },
-            };
-            return tryCatch(() => task(self, ac.signal), {
-                finally: () => ac.abort(),
-            });
+            const abort = ac.abort.bind(ac);
+            const self = createTemporaryStore(getFinalStore(), ac);
+            try {
+                const out = task(self, ac.signal);
+                if (out instanceof Promise) {
+                    out.finally(abort);
+                }
+                return out;
+            } finally {
+                abort();
+            }
         },
 
         catch(...errors) {
@@ -155,22 +157,6 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
                 reportError(error);
             }
         },
-    };
-
-    let lastMsg: TMsg;
-    let nextMsg: Promise<TMsg> | undefined;
-    const setupForNextMessage = (
-        resolve: (msg: TMsg) => void,
-        reject: (reason: unknown) => void,
-    ) => {
-        const { addTeardown, unsubscribe } = delegate.subscribe(() => {
-            nextMsg = undefined;
-            unsubscribe();
-            resolve(lastMsg);
-        });
-        addTeardown(() => {
-            reject(new Error(FUCK_TASK_EXITED));
-        });
     };
 
     let delegate: Store<TState, TMsg> = activeStore;
@@ -195,6 +181,29 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 		unsubscribe: (...a) => delegate.unsubscribe(...a),
 	};
 };
+
+function createTemporaryStore<TState, TMsg extends Msg>(
+    base: Store<TState, TMsg>,
+    { signal }: AbortController,
+): Store<TState, TMsg> {
+    const subscribe = (listener?: ListenerCallback) => {
+        const stream = base.subscribe(listener);
+        signal.addEventListener("abort", stream.unsubscribe);
+        const nextMessage = () => {
+            const aborted = new Promise<never>((_, reject) =>
+                signal.addEventListener("abort", reject),
+            );
+            const resolved = stream.nextMessage();
+            return Promise.race([aborted, resolved]);
+        };
+        return {
+            ...stream,
+            nextMessage: nextMessage,
+            [Symbol.asyncIterator]: () => MsgStreamIterator.create(nextMessage),
+        };
+    };
+    return { ...base, subscribe: subscribe };
+}
 
 function createScopedStore<TStateA, TStateB, TMsg extends Msg>(
     base: Store<TStateA, TMsg>,
