@@ -20,7 +20,7 @@ export interface Store<TState, TMsg extends Msg> {
     subscribe: (listener?: ListenerCallback) => MsgStream<TState, TMsg>;
     unsubscribe: (listener: AnyFn) => void;
 
-    execute: <T>(task: TaskOfStore<this, T>) => T;
+    execute: <T>(task: TaskOfStore<T, this>) => T;
     catch: (...errors: unknown[]) => void;
 }
 

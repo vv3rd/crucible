@@ -7,7 +7,7 @@ export interface Task<TResult, TState, TMsg extends Msg> {
     (Task_store: Store<TState, TMsg>, signal: AbortSignal): TResult;
 }
 
-export interface TaskOfStore<TStore extends Store<any, any>, TResult> {
+export interface TaskOfStore<TResult, TStore extends Store<any, any>> {
     (Task_store: TStore, signal: AbortSignal): TResult;
 }
 
