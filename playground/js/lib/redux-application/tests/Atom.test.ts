@@ -14,6 +14,7 @@ describe.only("Atom", () => {
                 }),
             ),
         );
+
         const stream = store.subscribe(() => {
             console.log(stream.lastMessage(), store.getState());
         });

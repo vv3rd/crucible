@@ -1,8 +1,6 @@
 import { Reducer } from "./Reducer";
 import { Task, TaskOfStore } from "./Task";
-import { doNothing, identity } from "../toolkit";
 import { FUCK_STORE_LOCKED } from "./Errors.ts";
-import { AnyFn, VoidFn } from "./Fn.ts";
 import { Msg } from "./Message.ts";
 
 export namespace Store {
@@ -17,16 +15,16 @@ export interface Store<TState, TMsg extends Msg> {
     // TODO: consider if it is worth adding, and if so, how?
     // context: {};
 
-    subscribe: (listener?: ListenerCallback) => MsgStream<TState, TMsg>;
-    unsubscribe: (listener: AnyFn) => void;
+    subscribe: (callback?: ListenerCallback) => MsgStream<TState, TMsg>;
+    unsubscribe: (callback: ListenerCallback) => void;
 
     execute: <T>(task: TaskOfStore<T, this>) => T;
     catch: (...errors: unknown[]) => void;
 }
 
 interface MsgStreamBase<TMsg extends Msg> extends Disposable, AsyncIterable<TMsg> {
-    unsubscribe(): void;
-    addTeardown(teardown: VoidFn): void;
+    unsubscribe: () => void;
+    addTeardown: (teardown: () => void) => void;
     nextMessage: () => Promise<TMsg>;
     lastMessage: () => TMsg;
 }
@@ -54,9 +52,12 @@ type InnerStoreCreator = <TState, TMsg extends Msg>(
     getFinalStore: () => Store<TState, TMsg>,
 ) => Store<TState, TMsg>;
 
+const noop = () => {};
+const same = <T>(thing: T): T => thing;
+
 export function createStore<TState, TMsg extends Msg>(
     reducer: Reducer<TState, TMsg>,
-    overlay: StoreOverlay = identity,
+    overlay: StoreOverlay = same,
 ) {
     const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, () => store);
     return store;
@@ -104,7 +105,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
             }
         },
 
-        subscribe(callback = doNothing) {
+        subscribe(callback = noop) {
             const self = getFinalStore();
             let listener = listeners.get(callback);
             if (listener === undefined) {

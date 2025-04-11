@@ -28,23 +28,23 @@ export function Msg<T extends Msg.Type, P>(type: T, payload?: P) {
 export namespace Msg {
     export type Type = string & { readonly MsgType?: unique symbol };
 
-    export function create<T extends string, M extends FactoryFn<any[], T>>(type: T, createMsg: M) {
-        type R = TypedFactory<M>;
+    export function create<T extends string, F extends FactoryFn<any[], T>>(type: T, createMsg: F) {
+        type R = TypedFactory<F>;
         return Object.assign(createMsg.bind({ type }), createMsg, {
             match: matchByType<ReturnType<typeof createMsg>>(type),
             type,
         }) as R;
     }
 
-    export function matchByType<M extends Msg = Msg>(type: string) {
-        return (ac: Msg): ac is M => ac.type === type;
+    export function matchByType<TMsg extends Msg = Msg>(type: string) {
+        return (ac: Msg): ac is TMsg => ac.type === type;
     }
 
     export type AnyFactoryFn = FactoryFn<any[], Msg.Type>;
-    export type FactoryFn<I extends any[], T extends Msg.Type, M extends Msg<T> = Msg<T>> = (
+    export type FactoryFn<I extends any[], T extends Msg.Type, TMsg extends Msg<T> = Msg<T>> = (
         this: { type: T },
         ...inputs: I
-    ) => M;
+    ) => TMsg;
 
     export type AnyTypedFactory = TypedFactory<AnyFactoryFn>;
     export type TypedFactory<F extends FactoryFn<any[], any>> = Matcher<ReturnType<F>> & {
@@ -57,11 +57,13 @@ export namespace Msg {
         type: T;
     };
 
-    export type Matcher<M extends Msg> = {
-        match: (message: Msg) => message is M;
+    export type Matcher<TMsg extends Msg> = {
+        match: (message: Msg) => message is TMsg;
     };
 
-    export type InferMatch<M extends Matcher<any>> = M extends Matcher<infer T> ? T : never;
+    export type InferMatch<TMatcher extends Matcher<any>> = TMatcher extends Matcher<infer T>
+        ? T
+        : never;
 
     export function ofType<T extends string>(type: T) {
         const builders = {
