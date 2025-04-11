@@ -4,17 +4,13 @@ import { Pretty } from "./types";
 
 export interface Msg<T extends Msg.Type = Msg.Type> {
     type: T;
-    // [key: string]: unknown;
 }
 
 export interface MsgWith<P, T extends Msg.Type = Msg.Type> extends Msg<T> {
     payload: P;
 }
 
-export type AnyMsg = Msg<any> & {
-    [key in string]: any;
-};
-export type UnknownMsg = Msg<Msg.Type> & {
+export type SomeMsg = Msg & {
     [key in string]: unknown;
 };
 

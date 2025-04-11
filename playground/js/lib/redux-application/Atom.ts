@@ -1,13 +1,13 @@
 import { Reducer } from "./Reducer";
 import { createWireUtils, WiredReducer, WiringRoot } from "./Wire";
 import { TaskScheduler } from "./Task";
-import { AnyMsg, Msg } from "./Message";
+import { Msg } from "./Message";
 import { useSelector } from "./React";
 import { AnyStore } from "./Store";
 
 export interface Atom<TValue, TMsg extends Msg> {
     address: string;
-    reducer: Reducer<TValue, AtomMsg<TMsg>>;
+    reducer: Reducer<TValue>;
     envelope: (message: TMsg) => AtomMsg.Envelope<TMsg>;
     select: (root: WiringRoot) => Atom.Handle<TValue, TMsg>;
     // TODO: consider if somewhere here must be an .address
@@ -20,7 +20,7 @@ export interface DerivedAtom<TValue> {
 
 export function Atom<TValue, TMsg extends Msg>(
     address: string,
-    reducer: Reducer<TValue, AtomMsg<TMsg>>,
+    reducer: Reducer<TValue>,
     customContext = Atom.defaultContext,
 ): Atom<TValue, TMsg> {
     const ctx = customContext;
@@ -80,11 +80,11 @@ export namespace Atom {
             [key: string]: Value<unknown>;
         };
         __atomReducers: {
-            [key: string]: Reducer<Value<unknown>, AtomMsg<AnyMsg>>;
+            [key: string]: Reducer<Value<unknown>>;
         };
     }
 
-    export interface RootInstance extends WiredReducer<Root, Msg> {}
+    export interface RootInstance extends WiredReducer<Root> {}
 
     export interface Context {
         selectRoot: RootInstance["select"];
@@ -182,11 +182,9 @@ export namespace AtomMsg {
 }
 
 function createAtomsRootImpl(rootName: string) {
-    type AtomRootMsg = AtomMsg.Mount | AtomMsg.Unmount | AtomMsg.Envelope<any> | AnyMsg;
+    const [connectWire, selectIt] = createWireUtils<Atom.Root>();
 
-    const [connectWire, selectIt] = createWireUtils<Atom.Root, AtomRootMsg>();
-
-    const atomsRootReducer: Reducer<Atom.Root, AtomRootMsg> = (
+    const atomsRootReducer: Reducer<Atom.Root> = (
         rootState = { __atomValues: {}, __atomReducers: {} },
         msg,
         exec,
@@ -254,10 +252,8 @@ function createAtomsRootImpl(rootName: string) {
         rootName: rootName,
     };
 
-    const createAtom = <TValue, TMsg extends Msg>(
-        address: string,
-        reducer: Reducer<TValue, AtomMsg<TMsg>>,
-    ) => Atom(address, reducer, context);
+    const createAtom = <TValue>(address: string, reducer: Reducer<TValue>) =>
+        Atom(address, reducer, context);
 
     const deriveAtom = <T>(getValue: (getter: <V>(atom: Atom<V, any>) => V) => T): DerivedAtom<T> =>
         Atom.derive(getValue, context);

@@ -1,19 +1,19 @@
 import { TaskScheduler } from "./Task";
-import { AnyMsg, Msg, MsgWith } from "./Message";
+import { Msg, MsgWith, SomeMsg } from "./Message";
 import { isPlainObject } from "../toolkit";
 import { Fn } from "./Fn";
 
-export interface Reducer<TState, TMsg extends Msg> {
+export interface Reducer<TState, TMsg = SomeMsg> {
     (
         Reducer_currentState: TState | undefined,
         Reducer_message: TMsg,
-        Reducer_taskScheduler: TaskScheduler<TState, TMsg>,
+        Reducer_taskScheduler: TaskScheduler<TState>,
     ): TState;
 }
 
 type AnyReducer = Reducer<any, any>;
 
-export function Reducer<TState, TMsg extends Msg>(reducer: Reducer<TState, TMsg>) {
+export function Reducer<TState>(reducer: Reducer<TState>) {
     return reducer;
 }
 
@@ -22,7 +22,7 @@ export namespace Reducer {
 
     export const build = createSlice;
 
-    export function initialize<TState>(reducer: Reducer<TState, any>) {
+    export function initialize<TState>(reducer: Reducer<TState>) {
         return reducer(undefined, InitAction, () => {});
     }
 
@@ -35,11 +35,10 @@ export namespace Reducer {
     type ReducerFromCombination<
         M extends Dict<AnyReducer>,
         var_State = { [P in keyof M]: InferState<M[P]> },
-        var_Msg extends Msg = InferMsg<M[keyof M]>,
-    > = keyof M extends never ? Reducer<{}, AnyMsg> : Reducer<var_State, var_Msg>;
+    > = keyof M extends never ? Reducer<{}> : Reducer<var_State>;
 
-    export type InferMsg<R> = R extends Reducer<any, infer A> ? A : never;
-    export type InferState<R> = R extends Reducer<infer S, any> ? S : never;
+    export type InferMsg<R> = R extends Reducer<any> ? Msg : never;
+    export type InferState<R> = R extends Reducer<infer S> ? S : never;
 }
 
 function composeReducersImpl(reducersObject: Record<string, AnyReducer>) {
@@ -56,7 +55,7 @@ function composeReducersImpl(reducersObject: Record<string, AnyReducer>) {
     return function composedReducer(
         current: TState | undefined,
         action: TMsg,
-        schedule: TaskScheduler<TState, TMsg>,
+        schedule: TaskScheduler<TState>,
     ): TState {
         let next: TState = current;
         for (let [key, reducer] of reducers) {
@@ -78,7 +77,7 @@ interface Accessor<T> {
     (): T;
     (Accessor_state: T | Partial<T>): T;
     (Accessor_update: (state: T) => T | Partial<T>): T;
-    do: TaskScheduler<T, any>;
+    do: TaskScheduler<T>;
 }
 
 type Updaters<T> = {
@@ -124,8 +123,11 @@ export function createSlice<T, N extends string, R extends Updaters<T>>(
         keys.map((key) => [key, Msg.ofType(`${reducerName}/${key}`).withPayload<any[]>()]),
     ) as unknown as TMsgs;
 
-    const reducer: Reducer<T, TMsg> = (state = initialState, msg, exec) => {
-        if (!msg.type.startsWith(`${reducerName}/`)) {
+    const isMatchingMsg = (msg: Msg): msg is TMsg =>
+        Object.values(messages).some(({ match }) => match(msg));
+
+    const reducer: Reducer<T> = (state = initialState, msg, exec) => {
+        if (!isMatchingMsg(msg)) {
             return state;
         }
         const key = msg.type.slice(reducerName.length + 1);
@@ -165,7 +167,7 @@ export function createSlice<T, N extends string, R extends Updaters<T>>(
 function createPrimitiveReducerImpl<T, S extends string>(initialState: T, updType: S) {
     const updateMsg = Msg.ofType(updType).withPayload<T | ((current: T) => T)>();
 
-    function primitiveReducer(state = initialState, msg: ReturnType<typeof updateMsg>): T {
+    const primitiveReducer = (state = initialState, msg: Msg) => {
         if (updateMsg.match(msg)) {
             if (msg.payload instanceof Function) {
                 return msg.payload(state);
@@ -174,7 +176,7 @@ function createPrimitiveReducerImpl<T, S extends string>(initialState: T, updTyp
             }
         }
         return state;
-    }
+    };
     primitiveReducer.update = updateMsg;
     return primitiveReducer;
 }

@@ -1,10 +1,9 @@
 import { FUCK_TASK_POOL_CLOSED } from "./Errors";
-import { AnyMsg, Msg } from "./Message";
 import { AnyStore, Store } from "./Store";
 
-export type AnyTask<R = any> = Task<any, R, AnyMsg>;
-export interface Task<TResult, TState, TMsg extends Msg, TCtx> {
-    (Task_store: Store<TState, TMsg>, signal: AbortSignal): TResult;
+export type AnyTask<R = any> = Task<any, R>;
+export interface Task<TResult, TState > {
+    (Task_store: Store<TState>, signal: AbortSignal): TResult;
 }
 
 export interface TaskOfStore<TResult, TStore extends AnyStore> {
@@ -12,8 +11,8 @@ export interface TaskOfStore<TResult, TStore extends AnyStore> {
 }
 
 export namespace Task {
-    export const pool = <TResult, TState, TMsg extends Msg>() => {
-        const tasks: Task<TResult, TState, TMsg>[] = [];
+    export const pool = <TResult, TState>() => {
+        const tasks: Task<TResult, TState>[] = [];
         let scheduler = tasks.push.bind(tasks);
         const lockedScheduler = () => {
             throw new Error(FUCK_TASK_POOL_CLOSED);
@@ -32,15 +31,15 @@ export namespace Task {
     };
 }
 
-export interface TaskScheduler<TState, TMsg extends Msg> {
-    (TaskScheduler_taskFn: Task<void, TState, TMsg>): void;
+export interface TaskScheduler<TState> {
+    (TaskScheduler_taskFn: Task<void, TState>): void;
 }
 export namespace TaskScheduler {
     export const scoped =
-        <TStateA, TStateB, TMsg extends Msg>(
-            unscopedScheduler: TaskScheduler<TStateA, TMsg>,
+        <TStateA, TStateB>(
+            unscopedScheduler: TaskScheduler<TStateA>,
             selector: (state: TStateA) => TStateB,
-        ): TaskScheduler<TStateB, TMsg> =>
+        ): TaskScheduler<TStateB> =>
         (taskFn) => {
             unscopedScheduler((store, signal) => taskFn(Store.scoped(store, selector), signal));
         };

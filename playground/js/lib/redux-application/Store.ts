@@ -1,35 +1,35 @@
 import { Reducer } from "./Reducer";
 import { Task, TaskOfStore } from "./Task";
 import { FUCK_STORE_LOCKED } from "./Errors.ts";
-import { Msg } from "./Message.ts";
+import { Msg, SomeMsg } from "./Message.ts";
 
 export namespace Store {
     export const create = createStore;
     export const scoped = createScopedStore;
 }
 
-export interface Store<TState, TMsg extends Msg> {
-    dispatch: Dispatch<TMsg>;
+export interface Store<TState> {
+    dispatch: Dispatch;
     getState: () => TState;
 
     // TODO: consider if it is worth adding, and if so, how?
     // context: TCtx;
 
-    subscribe: (callback?: ListenerCallback) => MsgStream<TState, TMsg>;
+    subscribe: (callback?: ListenerCallback) => MsgStream<TState>;
     unsubscribe: (callback: ListenerCallback) => void;
 
     execute: <T>(task: TaskOfStore<T, this>) => T;
     catch: (...errors: unknown[]) => void;
 }
 
-interface MsgStreamBase<TMsg extends Msg> extends Disposable, AsyncIterable<TMsg> {
+interface MsgStreamBase extends Disposable, AsyncIterable<Msg> {
     unsubscribe: () => void;
     addTeardown: (teardown: () => void) => void;
-    nextMessage: () => Promise<TMsg>;
-    lastMessage: () => TMsg;
+    nextMessage: () => Promise<Msg>;
+    lastMessage: () => Msg;
 }
 
-interface MsgStream<TState, TMsg extends Msg> extends MsgStreamBase<TMsg> {
+interface MsgStream<TState> extends MsgStreamBase {
     query: MsgStreamQuery<TState>;
 }
 
@@ -41,34 +41,31 @@ export interface Listener {
     cleanups: Array<() => void>;
 }
 
-export interface Dispatch<TMsg> {
+export interface Dispatch<TMsg = SomeMsg> {
     (action: TMsg): void;
 }
 
 type StoreOverlay = (creator: StoreCreator) => StoreCreator;
 
-type StoreCreator = <TState, TMsg extends Msg>(
-    reducer: Reducer<TState, TMsg>,
-    final: () => Store<TState, TMsg>,
-) => Store<TState, TMsg>;
+type StoreCreator = <TState>(reducer: Reducer<TState>, final: () => Store<TState>) => Store<TState>;
 
-export type AnyStore = Store<any, any>;
+export type AnyStore = Store<any>;
 
 const noop = () => {};
 const same = <T>(thing: T): T => thing;
 
-function createStore<TState, TMsg extends Msg>(
-    reducer: Reducer<TState, TMsg>,
+function createStore<TState>(
+    reducer: Reducer<TState>,
     { overlay = same }: { overlay?: StoreOverlay } = {},
 ) {
-    const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, () => store);
+    const store: Store<TState> = overlay(createStoreImpl)(reducer, () => store);
     return store;
 }
 
 const createStoreImpl: StoreCreator = (reducer, final) => {
     type TState = Reducer.InferState<typeof reducer>;
-    type TMsg = Reducer.InferMsg<typeof reducer>;
-    type TSelf = Store<TState, TMsg>;
+    type TMsg = Msg;
+    type TSelf = Store<TState>;
 
     let state: TState = Reducer.initialize(reducer);
     let lastMsg: TMsg;
@@ -85,7 +82,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
             if (msg == null) {
                 return;
             }
-            const taskPool = Task.pool<void, TState, TMsg>();
+            const taskPool = Task.pool<void, TState>();
             try {
                 delegate = lockedStore;
                 state = reducer(state, msg, taskPool.getScheduler());
@@ -119,7 +116,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
                 listeners.set(callback, listener);
             }
             const unsubscribe = () => self.unsubscribe(callback);
-            const base: MsgStreamBase<TMsg> = {
+            const base: MsgStreamBase = {
                 addTeardown: (fn) => listener.cleanups.push(fn),
                 lastMessage: () => lastMsg,
                 nextMessage: () => nextMsg.promise,
@@ -127,7 +124,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
                 [Symbol.dispose]: unsubscribe,
                 [Symbol.asyncIterator]: () => MsgStreamIterator.create(base.nextMessage),
             };
-            const stream: MsgStream<TState, TMsg> = {
+            const stream: MsgStream<TState> = {
                 ...base,
                 query: MsgStreamQuery.create(base, self),
             };
@@ -187,10 +184,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
 	};
 };
 
-function createTemporaryStore<TState, TMsg extends Msg>(
-    base: Store<TState, TMsg>,
-    signal: AbortSignal,
-): Store<TState, TMsg> {
+function createTemporaryStore<TState>(base: Store<TState>, signal: AbortSignal): Store<TState> {
     const subscribe = (listener?: ListenerCallback) => {
         const stream = base.subscribe(listener);
         signal.addEventListener("abort", stream.unsubscribe);
@@ -210,11 +204,11 @@ function createTemporaryStore<TState, TMsg extends Msg>(
     return { ...base, subscribe: subscribe };
 }
 
-function createScopedStore<TStateA, TStateB, TMsg extends Msg>(
-    base: Store<TStateA, TMsg>,
+function createScopedStore<TStateA, TStateB>(
+    base: Store<TStateA>,
     selector: (state: TStateA) => TStateB,
-): Store<TStateB, TMsg> {
-    const self: Store<TStateB, TMsg> = {
+): Store<TStateB> {
+    const self: Store<TStateB> = {
         ...base,
         getState() {
             return selector(base.getState());
@@ -233,13 +227,11 @@ function createScopedStore<TStateA, TStateB, TMsg extends Msg>(
     return self;
 }
 
-interface MsgStreamIterator<TMsg extends Msg> {
-    next(): Promise<IteratorResult<TMsg, void>>;
+interface MsgStreamIterator {
+    next(): Promise<IteratorResult<Msg, void>>;
 }
 namespace MsgStreamIterator {
-    export function create<TMsg extends Msg>(
-        nextMessage: () => Promise<TMsg>,
-    ): MsgStreamIterator<TMsg> {
+    export function create(nextMessage: () => Promise<Msg>): MsgStreamIterator {
         return {
             async next() {
                 try {
@@ -259,15 +251,15 @@ interface MsgStreamQuery<TState> {
     <M extends Msg>(matcher: Msg.Matcher<M>): Promise<M>;
 }
 namespace MsgStreamQuery {
-    export function create<TState, TMsg extends Msg>(
-        { nextMessage }: Pick<MsgStreamBase<TMsg>, "nextMessage">,
-        { getState }: Pick<Store<TState, TMsg>, "getState">,
+    export function create<TState>(
+        { nextMessage }: Pick<MsgStreamBase, "nextMessage">,
+        { getState }: Pick<Store<TState>, "getState">,
     ): MsgStreamQuery<TState> {
         return async function query(arg: any) {
             if ("match" in arg) {
                 const matcher = arg;
 
-                let awaitedMessage: TMsg | undefined;
+                let awaitedMessage: Msg | undefined;
                 while (awaitedMessage === undefined) {
                     const msg = await nextMessage();
                     if (matcher.match(msg)) {
