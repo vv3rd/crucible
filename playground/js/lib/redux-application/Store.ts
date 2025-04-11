@@ -96,7 +96,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
             const self = getFinalStore();
             const errs: unknown[] = [];
             // biome-ignore format:
-            for (const listener of listeners.values()) try { listener.notify() } catch (e) { errs.push(e) }
+            for (const {notify} of listeners.values()) try { notify() } catch (e) { errs.push(e) }
             // biome-ignore format:
             for (const task of taskPool) try { self.execute(task) } catch (e) { errs.push(e) }
             if (errs.length) {
@@ -106,11 +106,12 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 
         subscribe(callback = doNothing) {
             const self = getFinalStore();
-            const listener: Listener | undefined = listeners.get(callback) ?? {
-                notify: callback,
-                cleanups: [],
-            };
-            if (!listeners.has(callback)) {
+            let listener = listeners.get(callback);
+            if (listener === undefined) {
+                listener = {
+                    notify: callback,
+                    cleanups: [],
+                };
                 listeners.set(callback, listener);
             }
             const unsubscribe = () => self.unsubscribe(callback);
