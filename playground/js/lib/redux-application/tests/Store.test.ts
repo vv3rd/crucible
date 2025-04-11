@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { createStore } from "../Store";
+import { Store } from "../Store";
 import { Reducer } from "../Reducer";
 import { expect } from "bun:test";
 
@@ -8,21 +8,23 @@ const reducer = Reducer.compose({
 });
 
 test("just stuff in general", () => {
-    const store = createStore(reducer);
+    const store = Store.create(reducer);
     expect(store.getState()).toMatchSnapshot();
     store.dispatch({ type: "setCount", payload: 10 });
     expect(store.getState()).toMatchSnapshot();
 });
 
 test("overlay", () => {
-    const store = createStore(reducer, (createStore) => {
-        return (reducer, final) => {
-            const store = createStore(reducer, final);
+    const store = Store.create(reducer, {
+        overlay: (createStore) => {
+            return (reducer, final) => {
+                const store = createStore(reducer, final);
 
-            return {
-                ...store,
+                return {
+                    ...store,
+                };
             };
-        };
+        },
     });
     //
     //

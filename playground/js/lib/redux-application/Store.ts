@@ -13,7 +13,7 @@ export interface Store<TState, TMsg extends Msg> {
     getState: () => TState;
 
     // TODO: consider if it is worth adding, and if so, how?
-    // context: {};
+    // context: TCtx;
 
     subscribe: (callback?: ListenerCallback) => MsgStream<TState, TMsg>;
     unsubscribe: (callback: ListenerCallback) => void;
@@ -45,27 +45,30 @@ export interface Dispatch<TMsg> {
     (action: TMsg): void;
 }
 
-type StoreOverlay = (creator: InnerStoreCreator) => InnerStoreCreator;
+type StoreOverlay = (creator: StoreCreator) => StoreCreator;
 
-type InnerStoreCreator = <TState, TMsg extends Msg>(
+type StoreCreator = <TState, TMsg extends Msg>(
     reducer: Reducer<TState, TMsg>,
-    getFinalStore: () => Store<TState, TMsg>,
+    final: () => Store<TState, TMsg>,
 ) => Store<TState, TMsg>;
+
+export type AnyStore = Store<any, any>;
 
 const noop = () => {};
 const same = <T>(thing: T): T => thing;
 
-export function createStore<TState, TMsg extends Msg>(
+function createStore<TState, TMsg extends Msg>(
     reducer: Reducer<TState, TMsg>,
-    overlay: StoreOverlay = same,
+    { overlay = same }: { overlay?: StoreOverlay } = {},
 ) {
     const store: Store<TState, TMsg> = overlay(createStoreImpl)(reducer, () => store);
     return store;
 }
 
-const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
+const createStoreImpl: StoreCreator = (reducer, final) => {
     type TState = Reducer.InferState<typeof reducer>;
     type TMsg = Reducer.InferMsg<typeof reducer>;
+    type TSelf = Store<TState, TMsg>;
 
     let state: TState = Reducer.initialize(reducer);
     let lastMsg: TMsg;
@@ -73,7 +76,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 
     const listeners = new Map<ListenerCallback, Listener>();
 
-    const activeStore: Store<TState, TMsg> = {
+    const activeStore: TSelf = {
         getState() {
             return state;
         },
@@ -94,7 +97,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
             nextMsg.resolve(msg);
             nextMsg = Promise.withResolvers();
 
-            const self = getFinalStore();
+            const self = final();
             const errs: unknown[] = [];
             // biome-ignore format:
             for (const {notify} of listeners.values()) try { notify() } catch (e) { errs.push(e) }
@@ -106,7 +109,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
         },
 
         subscribe(callback = noop) {
-            const self = getFinalStore();
+            const self = final();
             let listener = listeners.get(callback);
             if (listener === undefined) {
                 listener = {
@@ -142,7 +145,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
         execute(task) {
             const ac = new AbortController();
             const abort = ac.abort.bind(ac);
-            const self = createTemporaryStore(getFinalStore(), ac);
+            const self = createTemporaryStore(final(), ac.signal);
             try {
                 const out = task(self, ac.signal);
                 if (out instanceof Promise) {
@@ -161,10 +164,10 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
         },
     };
 
-    let delegate: Store<TState, TMsg> = activeStore;
+    let delegate: TSelf = activeStore;
 
     // biome-ignore format: saves space
-    const lockedStore: Store<TState, TMsg> = {
+    const lockedStore: TSelf = {
         dispatch() { throw new Error(FUCK_STORE_LOCKED); },
         execute() { throw new Error(FUCK_STORE_LOCKED); },
         catch() { throw new Error(FUCK_STORE_LOCKED); },
@@ -186,7 +189,7 @@ const createStoreImpl: InnerStoreCreator = (reducer, getFinalStore) => {
 
 function createTemporaryStore<TState, TMsg extends Msg>(
     base: Store<TState, TMsg>,
-    { signal }: AbortController,
+    signal: AbortSignal,
 ): Store<TState, TMsg> {
     const subscribe = (listener?: ListenerCallback) => {
         const stream = base.subscribe(listener);

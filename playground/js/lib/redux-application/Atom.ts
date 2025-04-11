@@ -3,7 +3,7 @@ import { createWireUtils, WiredReducer, WiringRoot } from "./Wire";
 import { TaskScheduler } from "./Task";
 import { AnyMsg, Msg } from "./Message";
 import { useSelector } from "./React";
-import { Store } from "./Store";
+import { AnyStore } from "./Store";
 
 export interface Atom<TValue, TMsg extends Msg> {
     address: string;
@@ -270,8 +270,6 @@ function createAtomsRootImpl(rootName: string) {
         deriveAtom: deriveAtom,
     };
 }
-
-type AnyStore = Store<any, any>;
 
 const MountsCounter = new WeakMap<AnyStore, WeakMap<AnyAtom, number>>();
 

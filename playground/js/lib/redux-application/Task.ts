@@ -1,13 +1,13 @@
 import { FUCK_TASK_POOL_CLOSED } from "./Errors";
 import { AnyMsg, Msg } from "./Message";
-import { Store } from "./Store";
+import { AnyStore, Store } from "./Store";
 
 export type AnyTask<R = any> = Task<any, R, AnyMsg>;
-export interface Task<TResult, TState, TMsg extends Msg> {
+export interface Task<TResult, TState, TMsg extends Msg, TCtx> {
     (Task_store: Store<TState, TMsg>, signal: AbortSignal): TResult;
 }
 
-export interface TaskOfStore<TResult, TStore extends Store<any, any>> {
+export interface TaskOfStore<TResult, TStore extends AnyStore> {
     (Task_store: TStore, signal: AbortSignal): TResult;
 }
 

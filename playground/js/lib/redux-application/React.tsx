@@ -2,19 +2,17 @@ import React, {
   createContext,
   use,
   useCallback,
-  useContext,
   useSyncExternalStore,
 } from "react";
-import { Store } from "./Store";
-import { AnyFn } from "./Fn";
+import { AnyStore } from "./Store";
 
-const StoreContext = createContext<Store<any, any> | null>(null);
+const StoreContext = createContext<AnyStore | null>(null);
 
 function StoreProvider({
   store,
   children,
 }: {
-  store: Store<any, any>;
+  store: AnyStore;
   children?: React.ReactNode;
 }) {
   return <StoreContext value={store}>{children}</StoreContext>;
@@ -36,7 +34,10 @@ export function useSelector<T, S extends keyof StoreRegistry = "global">(
   selector: (state: StoreRegistry[S]) => T,
 ) {
   const store = useStore();
-  const snapshot = useCallback(() => selector(store.getState()), [store, selector]);
+  const snapshot = useCallback(
+    () => selector(store.getState()),
+    [store, selector],
+  );
   const value = useSyncExternalStore(
     useCallback((fn) => store.subscribe(fn).unsubscribe, [store]),
     snapshot,

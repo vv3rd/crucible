@@ -1,14 +1,14 @@
 import { FUCK_TASK_NOT_REAL } from "./Errors";
 import { Msg } from "./Message";
 import { Reducer } from "./Reducer";
-import { Store } from "./Store";
+import { AnyStore } from "./Store";
 import { Task, TaskScheduler } from "./Task";
 
 export namespace Wire {}
 
 const probeKey = Symbol();
 const probeMsg = Msg.ofType(`wire-${Math.round(Math.random() * 100)}`).withPayload(
-    (task: <S>(wireId: string) => (api: Store<S, any>) => void) => ({
+    (task: <S>(wireId: string) => (api: AnyStore) => void) => ({
         [probeKey]: task,
     }),
 );
@@ -24,19 +24,19 @@ export interface WiredReducer<TState, TMsg extends Msg> extends Reducer<TState, 
 
 export function createWireUtils<TState, TMsg extends Msg>() {
     const wireId = Math.random().toString(36).substring(2);
-    const connector = (msg: Msg, exec: TaskScheduler<TState, TMsg>) => {
+    function connectWire(msg: Msg, exec: TaskScheduler<TState, TMsg>) {
         if (probeMsg.match(msg)) {
             exec(msg.payload[probeKey](wireId));
         }
-    };
-    const selector = (root: WiringRoot) => {
+    }
+    function selectSelf(root: WiringRoot) {
         const wiringMeta = root[wiringKey];
         const selector = wiringMeta?.[wireId];
         const output = selector?.(root);
         return output as TState;
-    };
+    }
 
-    return [connector, selector] as const;
+    return [connectWire, selectSelf] as const;
 }
 
 export function createWire<TState, TMsg extends Msg>(
@@ -101,7 +101,8 @@ export function createWiringRoot<TState extends object, TMsg extends Msg>(
 }
 
 // biome-ignore format:
-const stubTaskControls: Store<any, any> = {
+const stubTaskControls: AnyStore = {
+    context: {},
     execute() { throw new Error(FUCK_TASK_NOT_REAL); },
     catch() { throw new Error(FUCK_TASK_NOT_REAL); },
     dispatch() { throw new Error(FUCK_TASK_NOT_REAL); },
