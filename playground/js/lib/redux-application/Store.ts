@@ -8,12 +8,12 @@ export namespace Store {
     export const scoped = createScopedStore;
 }
 
-export interface Store<TState> {
+export interface Store<TState, TCtx = {}> {
     dispatch: Dispatch;
     getState: () => TState;
 
     // TODO: consider if it is worth adding, and if so, how?
-    // context: TCtx;
+    context: TCtx;
 
     subscribe: (callback?: ListenerCallback) => MsgStream<TState>;
     unsubscribe: (callback: ListenerCallback) => void;
@@ -45,27 +45,37 @@ export interface Dispatch<TMsg = SomeMsg> {
     (action: TMsg): void;
 }
 
-type StoreOverlay = (creator: StoreCreator) => StoreCreator;
+type StoreOverlay<TState, TCtx> = (
+    creator: StoreCreator<TState, TCtx>,
+) => StoreCreator<TState, TCtx>;
 
-type StoreCreator = <TState>(reducer: Reducer<TState>, final: () => Store<TState>) => Store<TState>;
+type StoreCreator<TState, TCtx> = (
+    reducer: Reducer<TState>,
+    context: TCtx,
+    final: () => Store<TState, TCtx>,
+) => Store<TState, TCtx>;
 
-export type AnyStore = Store<any>;
+export type AnyStore = Store<any, any>;
 
 const noop = () => {};
 const same = <T>(thing: T): T => thing;
 
-function createStore<TState>(
+function createStore<TState, TCtx = {}>(
     reducer: Reducer<TState>,
-    { overlay = same }: { overlay?: StoreOverlay } = {},
+    {
+        overlay = same,
+        context = {} as TCtx,
+    }: { overlay?: StoreOverlay<TState, TCtx>; context?: TCtx } = {},
 ) {
-    const store: Store<TState> = overlay(createStoreImpl)(reducer, () => store);
+    const store: Store<TState, TCtx> = overlay(createStoreImpl)(reducer, context, () => store);
     return store;
 }
 
-const createStoreImpl: StoreCreator = (reducer, final) => {
+const createStoreImpl: StoreCreator<any, any> = (reducer, context, final) => {
     type TState = Reducer.InferState<typeof reducer>;
     type TMsg = Msg;
-    type TSelf = Store<TState>;
+    type TCtx = typeof context;
+    type TSelf = Store<TState, TCtx>;
 
     let state: TState = Reducer.initialize(reducer);
     let lastMsg: TMsg;
@@ -74,6 +84,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
     const listeners = new Map<ListenerCallback, Listener>();
 
     const activeStore: TSelf = {
+        context,
         getState() {
             return state;
         },
@@ -82,7 +93,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
             if (msg == null) {
                 return;
             }
-            const taskPool = Task.pool<void, TState>();
+            const taskPool = Task.pool<void, TState, TCtx>();
             try {
                 delegate = lockedStore;
                 state = reducer(state, msg, taskPool.getScheduler());
@@ -165,6 +176,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
 
     // biome-ignore format: saves space
     const lockedStore: TSelf = {
+        context,
         dispatch() { throw new Error(FUCK_STORE_LOCKED); },
         execute() { throw new Error(FUCK_STORE_LOCKED); },
         catch() { throw new Error(FUCK_STORE_LOCKED); },
@@ -175,6 +187,7 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
 
     // biome-ignore format: better visual
     return {
+        context,
 		dispatch:    (...a) => delegate.dispatch(...a),
 		execute:     (...a) => delegate.execute(...a),
 		catch:       (...a) => delegate.catch(...a),
@@ -184,7 +197,10 @@ const createStoreImpl: StoreCreator = (reducer, final) => {
 	};
 };
 
-function createTemporaryStore<TState>(base: Store<TState>, signal: AbortSignal): Store<TState> {
+function createTemporaryStore<TState, TCtx>(
+    base: Store<TState, TCtx>,
+    signal: AbortSignal,
+): Store<TState, TCtx> {
     const subscribe = (listener?: ListenerCallback) => {
         const stream = base.subscribe(listener);
         signal.addEventListener("abort", stream.unsubscribe);
@@ -204,11 +220,11 @@ function createTemporaryStore<TState>(base: Store<TState>, signal: AbortSignal):
     return { ...base, subscribe: subscribe };
 }
 
-function createScopedStore<TStateA, TStateB>(
-    base: Store<TStateA>,
+function createScopedStore<TStateA, TStateB, TCtx>(
+    base: Store<TStateA, TCtx>,
     selector: (state: TStateA) => TStateB,
-): Store<TStateB> {
-    const self: Store<TStateB> = {
+): Store<TStateB, TCtx> {
+    const self: Store<TStateB, TCtx> = {
         ...base,
         getState() {
             return selector(base.getState());

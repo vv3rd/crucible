@@ -3,11 +3,11 @@ import { Msg, MsgWith, SomeMsg } from "./Message";
 import { isPlainObject } from "../toolkit";
 import { Fn } from "./Fn";
 
-export interface Reducer<TState, TMsg = SomeMsg> {
+export interface Reducer<TState, TMsg = SomeMsg, TCtx = {}> {
     (
         Reducer_currentState: TState | undefined,
         Reducer_message: TMsg,
-        Reducer_taskScheduler: TaskScheduler<TState>,
+        Reducer_taskScheduler: TaskScheduler<TState, TCtx>,
     ): TState;
 }
 

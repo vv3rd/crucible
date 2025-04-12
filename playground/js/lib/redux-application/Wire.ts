@@ -1,5 +1,5 @@
 import { FUCK_TASK_NOT_REAL } from "./Errors";
-import { Msg } from "./Message";
+import { Msg, SomeMsg } from "./Message";
 import { Reducer } from "./Reducer";
 import { AnyStore } from "./Store";
 import { Task, TaskScheduler } from "./Task";
@@ -49,13 +49,15 @@ export function createWire<TState>(reducer: Reducer<TState>): WiredReducer<TStat
     return wiredReducer;
 }
 
-export function createWiringRoot<TState extends object>(reducer: Reducer<TState>) {
+export function createWiringRoot<TState extends object, TCtx>(
+    reducer: Reducer<TState, SomeMsg, TCtx>,
+) {
     type WiredState = WiringRoot & TState;
     const wireMeta: Record<string, (state: WiredState) => unknown> = {};
     const probe = probeMsg((wireId) => (api) => {
         wireMeta[wireId] = createWireSelector(api.getState);
     });
-    const tasks = Task.pool<any, WiredState>();
+    const tasks = Task.pool<any, WiredState, TCtx>();
     try {
         reducer(undefined, probe as any, tasks.getScheduler());
     } finally {
@@ -85,7 +87,7 @@ export function createWiringRoot<TState extends object>(reducer: Reducer<TState>
         };
     }
 
-    const wiringRootReducer: Reducer<WiredState> = (state, msg, schedule) => {
+    const wiringRootReducer: Reducer<WiredState, SomeMsg, TCtx> = (state, msg, schedule) => {
         state = reducer(state, msg, schedule);
         if (!(wiringKey in state)) {
             state = { ...state, [wiringKey]: wireMeta };
@@ -98,6 +100,7 @@ export function createWiringRoot<TState extends object>(reducer: Reducer<TState>
 
 // biome-ignore format:
 const stubTaskControls: AnyStore = {
+    context: {},
     execute() { throw new Error(FUCK_TASK_NOT_REAL); },
     catch() { throw new Error(FUCK_TASK_NOT_REAL); },
     dispatch() { throw new Error(FUCK_TASK_NOT_REAL); },
