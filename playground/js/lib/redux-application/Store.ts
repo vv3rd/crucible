@@ -1,36 +1,50 @@
 import { Reducer } from "./Reducer";
-import { Task, TaskOfStore } from "./Task";
-import { FUCK_STORE_LOCKED } from "./Errors.ts";
+import { Task } from "./Task";
+import { FUCK_STORE_LOCKED, FUCK_TASK_EXITED } from "./Errors.ts";
 import { Msg, SomeMsg } from "./Message.ts";
+import { Pretty } from "./types.ts";
 
 export namespace Store {
     export const create = createStore;
     export const scoped = createScopedStore;
+    export const forTask = createStoreForTask;
 }
 
 export interface Store<TState, TCtx = {}> {
     dispatch: Dispatch;
     getState: () => TState;
 
-    // TODO: consider if it is worth adding, and if so, how?
-    context: TCtx;
+    context: Readonly<TCtx>;
 
-    subscribe: (callback?: ListenerCallback) => MsgStream<TState>;
+    subscribe: (callback: ListenerCallback) => Subscription;
     unsubscribe: (callback: ListenerCallback) => void;
 
-    execute: <T>(task: TaskOfStore<T, this>) => T;
+    execute: <T>(task: Task<T, TState, TCtx>) => T;
     catch: (...errors: unknown[]) => void;
 }
 
-interface MsgStreamBase extends Disposable, AsyncIterable<Msg> {
-    unsubscribe: () => void;
-    addTeardown: (teardown: () => void) => void;
+export interface StoreInTask<TState, TCtx = {}> extends Store<TState, TCtx> {
+    subscribe: (callback?: ListenerCallback) => MsgStream<TState>;
+    signal: AbortSignal;
+}
+
+interface Unsubscribe {
+    (): void;
+}
+
+interface Subscription extends Unsubscribe {
+    onUnsubscribe: (teardown: () => void) => void;
     nextMessage: () => Promise<Msg>;
     lastMessage: () => Msg;
 }
 
-interface MsgStream<TState> extends MsgStreamBase {
-    query: MsgStreamQuery<TState>;
+interface MsgStream<TState> extends Subscription, Disposable, AsyncIterable<Msg> {
+    query: {
+        (checker: (state: TState) => boolean): Promise<TState>;
+        <U extends TState>(predicate: (state: TState) => state is U): Promise<U>;
+        <T>(selector: (state: TState) => T | null | undefined | false): Promise<T>;
+        <M extends Msg>(matcher: Msg.Matcher<M>): Promise<M>;
+    };
 }
 
 export interface ListenerCallback {
@@ -65,7 +79,10 @@ function createStore<TState, TCtx = {}>(
     {
         overlay = same,
         context = {} as TCtx,
-    }: { overlay?: StoreOverlay<TState, TCtx>; context?: TCtx } = {},
+    }: {
+        overlay?: StoreOverlay<TState, TCtx>;
+        context?: TCtx;
+    } = {},
 ) {
     const store: Store<TState, TCtx> = overlay(createStoreImpl)(reducer, context, () => store);
     return store;
@@ -126,20 +143,11 @@ const createStoreImpl: StoreCreator<any, any> = (reducer, context, final) => {
                 };
                 listeners.set(callback, listener);
             }
-            const unsubscribe = () => self.unsubscribe(callback);
-            const base: MsgStreamBase = {
-                addTeardown: (fn) => listener.cleanups.push(fn),
-                lastMessage: () => lastMsg,
-                nextMessage: () => nextMsg.promise,
-                unsubscribe: unsubscribe,
-                [Symbol.dispose]: unsubscribe,
-                [Symbol.asyncIterator]: () => MsgStreamIterator.create(base.nextMessage),
-            };
-            const stream: MsgStream<TState> = {
-                ...base,
-                query: MsgStreamQuery.create(base, self),
-            };
-            return stream;
+            const sub: Subscription = () => self.unsubscribe(callback);
+            sub.onUnsubscribe = (teardown) => listener.cleanups.push(teardown);
+            sub.lastMessage = () => lastMsg;
+            sub.nextMessage = () => nextMsg.promise;
+            return sub;
         },
 
         unsubscribe(callback) {
@@ -152,16 +160,15 @@ const createStoreImpl: StoreCreator<any, any> = (reducer, context, final) => {
 
         execute(task) {
             const ac = new AbortController();
-            const abort = ac.abort.bind(ac);
-            const self = createTemporaryStore(final(), ac.signal);
+            const close = () => ac.abort(new Error(FUCK_TASK_EXITED));
             try {
-                const out = task(self, ac.signal);
+                const out = task(createStoreForTask(final(), ac.signal));
                 if (out instanceof Promise) {
-                    out.finally(abort);
+                    out.finally(close);
                 }
                 return out;
             } finally {
-                abort();
+                close();
             }
         },
 
@@ -197,27 +204,71 @@ const createStoreImpl: StoreCreator<any, any> = (reducer, context, final) => {
 	};
 };
 
-function createTemporaryStore<TState, TCtx>(
+function createStoreForTask<TState, TCtx>(
     base: Store<TState, TCtx>,
     signal: AbortSignal,
-): Store<TState, TCtx> {
-    const subscribe = (listener?: ListenerCallback) => {
-        const stream = base.subscribe(listener);
-        signal.addEventListener("abort", stream.unsubscribe);
-        const nextMessage = () => {
-            const aborted = new Promise<never>((_, reject) =>
-                signal.addEventListener("abort", reject),
-            );
-            const resolved = stream.nextMessage();
-            return Promise.race([aborted, resolved]);
+): StoreInTask<TState, TCtx> {
+    return { ...base, subscribe, signal };
+
+    function subscribe(listener: ListenerCallback = noop): MsgStream<TState> {
+        {
+            const sub = base.subscribe(listener);
+            var unsubscribe = () => sub();
+            var { onUnsubscribe, lastMessage, nextMessage } = sub;
+        }
+
+        signal.addEventListener("abort", unsubscribe);
+
+        const stream: Pretty<MsgStream<TState>> = {
+            onUnsubscribe: onUnsubscribe,
+            lastMessage: lastMessage,
+            nextMessage: () => {
+                const resolved = nextMessage();
+                const disposed = new Promise<never>((_, reject) => onUnsubscribe(reject));
+                return Promise.race([resolved, disposed]);
+            },
+            query: async (arg: any) => {
+                if ("match" in arg) {
+                    const matcher = arg;
+
+                    let awaitedMessage: Msg | undefined;
+                    while (awaitedMessage === undefined) {
+                        const msg = await stream.nextMessage();
+                        if (matcher.match(msg)) {
+                            awaitedMessage = msg;
+                        }
+                    }
+                    return awaitedMessage;
+                } else {
+                    const checker = arg;
+
+                    let state = base.getState();
+                    let check = checker(state);
+                    while (check == null || check === false) {
+                        await stream.nextMessage();
+                        state = base.getState();
+                        check = checker(state);
+                    }
+                    if (typeof check === "boolean") {
+                        return state;
+                    } else {
+                        return check;
+                    }
+                }
+            },
+            [Symbol.dispose]: unsubscribe,
+            [Symbol.asyncIterator]: (): AsyncIterator<Msg> => ({
+                async next() {
+                    try {
+                        return { value: await stream.nextMessage() };
+                    } catch {
+                        return { done: true, value: undefined };
+                    }
+                },
+            }),
         };
-        return {
-            ...stream,
-            nextMessage: nextMessage,
-            [Symbol.asyncIterator]: () => MsgStreamIterator.create(nextMessage),
-        };
-    };
-    return { ...base, subscribe: subscribe };
+        return Object.assign(unsubscribe, stream);
+    }
 }
 
 function createScopedStore<TStateA, TStateB, TCtx>(
@@ -230,75 +281,8 @@ function createScopedStore<TStateA, TStateB, TCtx>(
             return selector(base.getState());
         },
         execute(task) {
-            return base.execute((_, signal) => task(self, signal));
-        },
-        subscribe(listener) {
-            const stream = base.subscribe(listener);
-            return {
-                ...stream,
-                query: MsgStreamQuery.create(stream, self),
-            };
+            return base.execute(({ signal }) => task(createStoreForTask(self, signal)));
         },
     };
     return self;
-}
-
-interface MsgStreamIterator {
-    next(): Promise<IteratorResult<Msg, void>>;
-}
-namespace MsgStreamIterator {
-    export function create(nextMessage: () => Promise<Msg>): MsgStreamIterator {
-        return {
-            async next() {
-                try {
-                    return { value: await nextMessage() };
-                } catch {
-                    return { done: true, value: undefined };
-                }
-            },
-        };
-    }
-}
-
-interface MsgStreamQuery<TState> {
-    (checker: (state: TState) => boolean): Promise<TState>;
-    <U extends TState>(predicate: (state: TState) => state is U): Promise<U>;
-    <T>(selector: (state: TState) => T | null | undefined | false): Promise<T>;
-    <M extends Msg>(matcher: Msg.Matcher<M>): Promise<M>;
-}
-namespace MsgStreamQuery {
-    export function create<TState>(
-        { nextMessage }: Pick<MsgStreamBase, "nextMessage">,
-        { getState }: Pick<Store<TState>, "getState">,
-    ): MsgStreamQuery<TState> {
-        return async function query(arg: any) {
-            if ("match" in arg) {
-                const matcher = arg;
-
-                let awaitedMessage: Msg | undefined;
-                while (awaitedMessage === undefined) {
-                    const msg = await nextMessage();
-                    if (matcher.match(msg)) {
-                        awaitedMessage = msg;
-                    }
-                }
-                return awaitedMessage;
-            } else {
-                const checker = arg;
-
-                let state = getState();
-                let check = checker(state);
-                while (check == null || check === false) {
-                    await nextMessage();
-                    state = getState();
-                    check = checker(state);
-                }
-                if (typeof check === "boolean") {
-                    return state;
-                } else {
-                    return check;
-                }
-            }
-        };
-    }
 }

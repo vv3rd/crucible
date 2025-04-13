@@ -1,14 +1,13 @@
 import { Msg, MsgWith } from "./Message";
-import { Store } from "./Store";
+import { StoreInTask } from "./Store";
 import { Task, TaskScheduler } from "./Task";
 import { isPlainObject, TODO } from "./utils";
 
 enum CacheStatus {
     Initial,
     Pending,
-    Receiving,
-    Failed,
-    Closed,
+    GotError,
+    GotValue,
 }
 
 enum TaskStatus {
@@ -19,25 +18,24 @@ enum TaskStatus {
 
 // biome-ignore format:
 type CacheResultsForStatus<R> = {
-	[CacheStatus.Initial]:   { data: undefined;     error: undefined };
-	[CacheStatus.Pending]:   { data: undefined;     error: undefined };
-	[CacheStatus.Receiving]: { data: R;             error: undefined };
-	[CacheStatus.Closed]:    { data: R;             error: undefined };
-	[CacheStatus.Failed]:    { data: R | undefined; error: Error     };
+	[CacheStatus.Initial]:  { value: undefined;     error: undefined };
+	[CacheStatus.Pending]:  { value: undefined;     error: undefined };
+	[CacheStatus.GotValue]: { value: R;             error: undefined };
+	[CacheStatus.GotError]: { value: R | undefined; error: Error     };
 };
 
-type DataForStatus<S extends CacheStatus, R> = CacheResultsForStatus<R>[S]["data"];
+type ValueForStatus<S extends CacheStatus, R> = CacheResultsForStatus<R>[S]["value"];
 type ErrorForStatus<S extends CacheStatus, R> = CacheResultsForStatus<R>[S]["error"];
 
 interface CacheMeta {
-    dataUpdatedAt: number;
+    valueUpdatedAt: number;
     errorUpdatedAt: number;
 }
 
 interface CacheLike<R> {
     taskStatus: TaskStatus;
     status: CacheStatus;
-    data: DataForStatus<this["status"], R>;
+    value: ValueForStatus<this["status"], R>;
     error: ErrorForStatus<this["status"], R>;
 }
 
@@ -49,29 +47,21 @@ interface InitialCache<R> extends SomeCache<R> {
 interface PendingCache<R> extends SomeCache<R> {
     status: CacheStatus.Pending;
 }
-interface ClosedCache<R> extends SomeCache<R> {
-    status: CacheStatus.Closed;
+interface HasValueCache<R> extends SomeCache<R> {
+    status: CacheStatus.GotValue;
 }
-interface ReceivingCache<R> extends SomeCache<R> {
-    status: CacheStatus.Receiving;
-}
-interface FailedCache<R> extends SomeCache<R> {
-    status: CacheStatus.Failed;
+interface HasErrorCache<R> extends SomeCache<R> {
+    status: CacheStatus.GotError;
 }
 
-export type Cache<R> =
-    | InitialCache<R>
-    | PendingCache<R>
-    | ReceivingCache<R>
-    | FailedCache<R>
-    | ClosedCache<R>;
+export type Cache<R> = InitialCache<R> | PendingCache<R> | HasErrorCache<R> | HasValueCache<R>;
 
 namespace Cache {
     type PredicatedBy<Fn> = Fn extends (arg: any) => arg is infer T ? T : never;
     export const isResolved = <R>(
         resource: Cache<R>,
-    ): resource is Extract<Cache<R>, { status: CacheStatus.Receiving | CacheStatus.Closed }> => {
-        return resource.status === CacheStatus.Receiving || resource.status === CacheStatus.Closed;
+    ): resource is Extract<Cache<R>, { status: CacheStatus.GotValue }> => {
+        return resource.status === CacheStatus.GotValue;
     };
 
     export const isSettled = <R>(
@@ -85,62 +75,63 @@ namespace Cache {
         return !isSettled(resource);
     };
 
-    export const initial = <TData>(): InitialCache<TData> => ({
-        data: undefined,
-        error: undefined,
-        dataUpdatedAt: 0,
-        errorUpdatedAt: 0,
-        status: CacheStatus.Initial,
-        taskStatus: TaskStatus.Idle,
-    });
+    export const create = <TVal>(): InitialCache<TVal> => {
+        return {
+            value: undefined,
+            error: undefined,
+            valueUpdatedAt: 0,
+            errorUpdatedAt: 0,
+            status: CacheStatus.Initial,
+            taskStatus: TaskStatus.Idle,
+        };
+    };
 }
 
-interface CacheLifetime<TData> {
-    shouldInvalidate: (instance: Cache<TData>, msg: Msg) => boolean;
-    shouldDiscard: (instance: Cache<TData>, msg: Msg) => boolean;
-    shouldSet: (instance: Cache<TData>, msg: Msg) => msg is MsgWith<TData>;
+interface CacheLifetime<TVal> {
+    shouldInvalidate: (instance: Cache<TVal>, msg: Msg) => boolean;
+    shouldDiscard: (instance: Cache<TVal>, msg: Msg) => boolean;
+    shouldSet: (instance: Cache<TVal>, msg: Msg) => msg is MsgWith<TVal>;
+    untilGarbage: number;
+    untilStale: number;
 }
 
-interface CacheDataStructure<TData> {
-    append: (current: TData, incomming: TData) => TData;
-    match: (current: TData, incomming: TData) => boolean;
+interface CacheDataStructure<TVal> {
+    append: (current: TVal, incomming: TVal) => TVal;
+    match: (current: TVal, incomming: TVal) => boolean;
 }
 
-interface CacheSetup<TData, TIn> {
+interface CacheSetup<TVal, TIn> {
     name: string;
-    fetch: (input: TIn) => CacheFetchTask<TData>;
-    lifetime: CacheLifetime<TData>;
-    structure: CacheDataStructure<TData>;
+    fetch: (input: TIn) => CacheFetchTask<TVal>;
+    lifetime: CacheLifetime<TVal>;
+    structure: CacheDataStructure<TVal>;
 }
 
-interface CacheSetupFacade<TData, TIn> {
+interface CacheSetupFacade<TVal, TIn> {
     name: string;
-    fetch: (input: TIn, api: Store<Cache<TData>>, signal: AbortSignal) => OptionalPromise<TData>;
+    fetch: (input: TIn, api: StoreInTask<Cache<TVal>>) => OptionalPromise<TVal>;
 }
 
 type OptionalPromise<T> = void | Promise<void | T>;
 
-type CacheFetchTask<TData> = Task<OptionalPromise<TData>, Cache<TData>>;
+type CacheFetchTask<TVal> = Task<OptionalPromise<TVal>, Cache<TVal>>;
 
-interface CacheState<TData, TIn> {
-    fresh: {
-        [key in string]: Cache<TData>;
-    };
-    stale: {
-        [key in string]: Cache<TData>;
+interface CacheState<TVal, TIn> {
+    caches: {
+        [key in string]: Cache<TVal>;
     };
 }
 
-function createCacheImpl<TData, TIn>(setup: CacheSetup<TData, TIn>) {
-    const { name: cacheName, fetch: fetchData, lifetime, structure } = setup;
-    type TCacheState = CacheState<TData, TIn>;
-    type TCache = Cache<TData>;
+function createCacheImpl<TVal, TIn>(setup: CacheSetup<TVal, TIn>) {
+    const { name: cacheName, fetch: fetchValue, lifetime, structure } = setup;
+    type TCacheState = CacheState<TVal, TIn>;
+    type TCache = Cache<TVal>;
 
-    function createCahce(key: string, instance: TCache): TCacheState {
-        return { fresh: { [key]: instance }, stale: {} };
+    function createCahceState(key: string, instance: TCache): TCacheState {
+        return { caches: { [key]: instance } };
     }
 
-    function resourceIsObserved(msg: Msg): msg is MsgWith<TIn> {
+    function resourceIsObserved(msg: Msg): msg is MsgWith<{ input: TIn; initialValue?: TVal }> {
         TODO();
     }
 
@@ -152,30 +143,28 @@ function createCacheImpl<TData, TIn>(setup: CacheSetup<TData, TIn>) {
         TODO();
     }
 
-    function observe(input: TIn): CacheFetchTask<TData> {
-        let key = inputsToKey(input)
-        return (scope, signal) => {
-            
-        }
+    function observe(input: TIn, initialValue?: TVal): CacheFetchTask<TVal> {
+        let key = inputToKey({ input });
+        return (scope) => {};
     }
 
     function reduceCache(
         state: TCacheState | null = null,
         msg: Msg,
-        schedule: TaskScheduler<TData>,
+        schedule: TaskScheduler<TVal>,
     ): TCacheState | null {
         if (resourceIsObserved(msg)) {
-            let key = inputsToKey(msg.payload);
-            let instance = state && state.fresh[key];
+            let key = inputToKey(msg.payload);
+            let instance = state && state.caches[key];
             if (instance == null) {
-                instance = Cache.initial();
+                instance = Cache.create();
             }
             if (instance.status === CacheStatus.Initial) {
                 schedule(({ dispatch }) => {});
-                // instance = 
+                // instance =
             }
             if (state == null) {
-                state = createCahce(key, instance);
+                state = createCahceState(key, instance);
             }
             return state;
         }
@@ -187,14 +176,14 @@ function createCacheImpl<TData, TIn>(setup: CacheSetup<TData, TIn>) {
     }
 }
 
-function inputsToKey(inputs: unknown) {
-    if (inputs == null) {
+function inputToKey({ input }: { input: unknown }) {
+    if (input == null) {
         return "-";
     }
-    if (typeof inputs === "object") {
-        return sortStringify(inputs);
+    if (typeof input === "object") {
+        return sortStringify(input);
     }
-    return String(inputs);
+    return String(input);
 }
 
 function sortStringify(inputs: object) {

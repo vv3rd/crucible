@@ -1,7 +1,7 @@
 import { FUCK_TASK_NOT_REAL } from "./Errors";
 import { Msg, SomeMsg } from "./Message";
 import { Reducer } from "./Reducer";
-import { AnyStore } from "./Store";
+import { AnyStore, StoreInTask } from "./Store";
 import { Task, TaskScheduler } from "./Task";
 
 export namespace Wire {}
@@ -63,9 +63,8 @@ export function createWiringRoot<TState extends object, TCtx>(
     } finally {
         tasks.lockScheduler();
     }
-    const signal = AbortSignal.abort();
     for (const task of tasks) {
-        task({ ...stubTaskControls, getState: () => stateGetter() }, signal);
+        task({ ...stubTaskControls, getState: () => stateGetter() });
     }
 
     let stateGetter = function lockedStateGetter(): WiredState {
@@ -99,8 +98,9 @@ export function createWiringRoot<TState extends object, TCtx>(
 }
 
 // biome-ignore format:
-const stubTaskControls: AnyStore = {
+const stubTaskControls: StoreInTask<any, any> = {
     context: {},
+    signal: AbortSignal.abort(),
     execute() { throw new Error(FUCK_TASK_NOT_REAL); },
     catch() { throw new Error(FUCK_TASK_NOT_REAL); },
     dispatch() { throw new Error(FUCK_TASK_NOT_REAL); },

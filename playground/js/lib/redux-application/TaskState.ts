@@ -1,30 +1,30 @@
 interface IdleTask {
-    taskIsRunning: false;
-    taskIsFinished: false;
-    taskResult: undefined;
+    running: false;
+    finished: false;
+    result: undefined;
 }
 
 interface RunningTask {
-    taskIsRunning: true;
-    taskIsFinished: false;
-    taskResult: undefined;
+    running: number;
+    finished: false;
+    result: undefined;
 }
 
 interface FinishedTask<Value> {
-    taskIsRunning: false;
-    taskIsFinished: true;
-    taskResult: TaskResult<Value>;
+    running: number | false;
+    finished: number;
+    result: TaskResult<Value>;
 }
 
 interface TaskSuccess<Value> {
     successful: true;
     value: Value;
-    error: never;
+    error: void;
 }
 
 interface TaskFailure {
     successful: false;
-    value: never;
+    value: void;
     error: Error;
 }
 
@@ -36,41 +36,44 @@ export type TaskState<T> = IdleTask | RunningTask | FinishedTask<T>;
 export namespace TaskState {
     // Utility functions to create task states
     export const idle = (): IdleTask => ({
-        taskIsRunning: false,
-        taskIsFinished: false,
-        taskResult: undefined,
+        running: false,
+        finished: false,
+        result: undefined,
     });
 
-    export const running = (): RunningTask => ({
-        taskIsRunning: true,
-        taskIsFinished: false,
-        taskResult: undefined,
+    export const running = (startTime: Date | number): RunningTask => ({
+        running: truthyTime(startTime),
+        finished: false,
+        result: undefined,
     });
 
-    export const success = <T>(value: T): FinishedTask<T> => ({
-        taskIsRunning: false,
-        taskIsFinished: true,
-        taskResult: {
+    export const success = <T>(value: T, currentTime: Date | number): FinishedTask<T> => ({
+        running: false,
+        finished: truthyTime(currentTime),
+
+        result: {
             successful: true,
             value,
-            error: undefined as never,
+            error: undefined,
         },
     });
 
-    export const failure = (error: unknown): FinishedTask<never> => {
+    export const failure = (error: unknown, currentTime: Date | number): FinishedTask<never> => {
         let err: Error;
         if (typeof error === "string") {
             err = new Error(error);
+            popStackLine(err);
         }
         if (error instanceof Error) {
             err = error;
         } else {
             err = new Error("Non-Error task failure", { cause: error });
+            popStackLine(err)
         }
         return {
-            taskIsRunning: false,
-            taskIsFinished: true,
-            taskResult: {
+            running: false,
+            finished: truthyTime(currentTime),
+            result: {
                 successful: false,
                 value: undefined as never,
                 error: err,
@@ -78,3 +81,13 @@ export namespace TaskState {
         };
     };
 }
+
+const truthyTime = (time: Date | number) => (time == 0 ? -1 : Number(time));
+
+const popStackLine = (error: Error) => {
+    if (error.stack) {
+        let stack = error.stack.split("\n");
+        stack.splice(1, 1);
+        error.stack = stack.join("\n");
+    }
+};

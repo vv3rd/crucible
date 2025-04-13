@@ -1,13 +1,9 @@
 import { FUCK_TASK_POOL_CLOSED } from "./Errors";
-import { AnyStore, Store } from "./Store";
+import { Store, StoreInTask } from "./Store";
 
 export type AnyTask<R = any> = Task<any, R, any>;
 export interface Task<TResult, TState, TCtx = {}> {
-    (Task_store: Store<TState, TCtx>, signal: AbortSignal): TResult;
-}
-
-export interface TaskOfStore<TResult, TStore extends AnyStore> {
-    (Task_store: TStore, signal: AbortSignal): TResult;
+    (Task_store: StoreInTask<TState, TCtx>): TResult;
 }
 
 export namespace Task {
@@ -41,6 +37,8 @@ export namespace TaskScheduler {
             selector: (state: TStateA) => TStateB,
         ): TaskScheduler<TStateB, TCtx> =>
         (taskFn) => {
-            unscopedScheduler((store, signal) => taskFn(Store.scoped(store, selector), signal));
+            unscopedScheduler((store) =>
+                taskFn(Store.forTask(Store.scoped(store, selector), store.signal)),
+            );
         };
 }
