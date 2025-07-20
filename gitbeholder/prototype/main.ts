@@ -1,18 +1,24 @@
-export function DrawGraph(history: Git.History): Drawing.Row[] {
+export function DrawGraph(history: Git.History): string[] {
+	BuildGraph(history);
+
+	todo();
+}
+
+export function BuildGraph(history: Git.History): Row[] {
 	let { commits } = history;
 
 	if (commits.length === 0) {
 		return [];
 	}
 
-	if (commits.length === 1) {
-		return [new Drawing.Row(commits[0], [])];
-	}
+	// if (commits.length === 1) {
+	// 	return [new Row(commits[0], [])];
+	// }
 
-	let ongoing = new Set<Drawing.Branch>();
-	let drawing = new Array<Drawing.Row>(commits.length);
+	let ongoing = new Set<Branch>();
+	let drawing = new Array<Row>(commits.length);
 
-	ongoing.add(new Drawing.Branch([commits[0]]));
+	let previousRow = (drawing[0] = Row.fromFirstCommit(commits[0]));
 
 	for (let i = 1; i < commits.length; i += 1) {
 		let thisCommit = commits[i];
@@ -25,6 +31,7 @@ export function DrawGraph(history: Git.History): Drawing.Row[] {
 
 		if (numberOfChildren === 0) {
 			if (numberOfParents === 0) {
+				let thisSlice = BranchSlice.currentFrom(Branch.start(thisCommit));
 				/* 
 	│  
 	│ @ <- dangling commit
@@ -125,130 +132,68 @@ export function DrawGraph(history: Git.History): Drawing.Row[] {
 }
 
 interface Joint {
-	beginning: Drawing.Branch[];
-	finishing: Drawing.Branch[];
+	beginning: Branch[];
+	finishing: Branch[];
 }
 
-export namespace Drawing {
-	export class Row {
-		constructor(
-			public commit: Git.Commit,
-			public snapshow: ReadonlyArray<BranchNode>,
-		) {}
+// before sleep idea: a row is a slice of a graph, it holds "branches" instances
+// were a branch is a stretch of commits between joint commits, it also holds
+// indecies of commits within these branches that are part of the slice
+export class Row {
+	static fromFirstCommit(commit: Git.Commit) {
+		return new Row([BranchSlice.currentFrom(new Branch([commit]))]);
 	}
 
-	export enum BranchNodeType {
-		Ongoing,
-		Merging,
-		Started,
-		Current,
+	constructor(
+		public readonly snapshot: ReadonlyArray<BranchSlice>,
+		//
+	) {}
+}
+
+export class BranchSlice {
+	static ongoingFrom(branch: Branch) {
+		return new BranchSlice(branch, branch.commits.length - 1, false);
+	}
+	static currentFrom(branch: Branch) {
+		return new BranchSlice(branch, branch.commits.length - 1, true);
 	}
 
-	export class BranchNode {
-		constructor(
-			public type: BranchNodeType,
-			public branch: Branch,
-		) {}
+	constructor(
+		public branch: Branch,
+		public commitIndex: number,
+		public isCurrent: boolean,
+	) {}
+}
+
+export class Branch {
+	static start(commit: Git.Commit) {
+		return new Branch([commit]);
 	}
 
-	export class Branch {
-		column = 0;
-		// cells = new Array<AnyCell>();
-		constructor(public commits: Array<Git.Commit>) {}
-		get length() {
-			return this.commits.length;
-		}
-		get firstCommit() {
-			return this.commits[0];
-		}
-		get lastCommit() {
-			return this.commits[this.commits.length - 1];
-		}
+	column = 0;
+
+	constructor(public commits: Array<Git.Commit>) {}
+
+	get length() {
+		return this.commits.length;
 	}
-
-	export enum Gliph {
-		Gap = " ",
-		Node = "@",
-		EdgeV = "│",
-		EdgeH = "─",
-		TurnNE = "╰",
-		TurnSE = "╭",
-		TurnSW = "╮",
-		TurnNW = "╯",
+	get firstCommit() {
+		return this.commits[0];
 	}
-
-	// FIXME: current implementation doesn't work with octopus commits
-	// need to account for casees when merging and starting branches have same position
-	export function drawRow(row: Row) {
-		const columns = Map.groupBy(row.snapshow, (node) => node.branch.column);
-
-		const {
-			branch: { column: columnOfCurrentCommit },
-		} = row.snapshow.find((node) => node.type === BranchNodeType.Current)!;
-
-		let rowDrawing = new Array<string>(columns.size);
-		let gap = Gliph.Gap;
-
-		for (let i = 0; i < columnOfCurrentCommit; i++) {
-			const nodes = columns.get(i)!;
-			if (nodes.length === 2) {
-				// TODO: somehow handle drawing starting and merging branch at the same column
-			} else {
-				const [node] = nodes;
-				gap = getGap(node, gap);
-				rowDrawing[i] = drawnodeBeforeCommit(node, gap)!;
-			}
-		}
-		{
-			gap = Gliph.Gap;
-			rowDrawing[columnOfCurrentCommit] = Gliph.Node;
-		}
-		for (let i = columns.size - 1; i > columnOfCurrentCommit; i--) {
-			const nodes = columns.get(i)!;
-			if (nodes.length === 2) {
-				// TODO: somehow handle drawing starting and merging branch at the same column
-			} else {
-				const [node] = nodes;
-				gap = getGap(node, gap);
-				rowDrawing[i] = drawnodeAfterCommit(node, gap)!;
-			}
-		}
-
-		return rowDrawing.join("");
+	get lastCommit() {
+		return this.commits[this.commits.length - 1];
 	}
+}
 
-	function getGap(node: BranchNode, currentGap: Gliph) {
-		if (
-			node.type === BranchNodeType.Merging ||
-			node.type === BranchNodeType.Started
-		) {
-			return Gliph.EdgeH;
-		} else {
-			return currentGap;
-		}
-	}
-
-	function drawnodeAfterCommit(node: BranchNode, gap: Gliph) {
-		switch (node.type) {
-			case BranchNodeType.Ongoing:
-				return gap + Gliph.EdgeV;
-			case BranchNodeType.Started:
-				return gap + Gliph.TurnNW;
-			case BranchNodeType.Merging:
-				return gap + Gliph.TurnSW;
-		}
-	}
-
-	function drawnodeBeforeCommit(node: BranchNode, gap: Gliph) {
-		switch (node.type) {
-			case BranchNodeType.Ongoing:
-				return Gliph.EdgeV + gap;
-			case BranchNodeType.Started:
-				return Gliph.TurnNE + gap;
-			case BranchNodeType.Merging:
-				return Gliph.TurnSE + gap;
-		}
-	}
+export enum Char {
+	Gap = " ",
+	Node = "@",
+	EdgeV = "│",
+	EdgeH = "─",
+	TurnNE = "╰",
+	TurnSE = "╭",
+	TurnSW = "╮",
+	TurnNW = "╯",
 }
 
 export namespace Git {
@@ -265,6 +210,10 @@ export namespace Git {
 	export class History {
 		constructor(public commits: Commit[]) {}
 	}
+}
+
+function todo(): never {
+	throw new Error("Implement this");
 }
 
 function absurd(clarification: string = ""): never {

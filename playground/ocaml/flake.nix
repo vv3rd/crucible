@@ -13,7 +13,9 @@
         packages = [
           pkgs.ocamlPackages.ocaml-lsp
           pkgs.ocamlPackages.utop
+          pkgs.ocamlPackages.odig
           pkgs.ocaml
+          pkgs.opam
           pkgs.ocamlformat
         ];
       };

@@ -1,0 +1,6 @@
+run: compile
+	./main
+	rm ./main
+	
+compile:
+	gcc -o main main.c

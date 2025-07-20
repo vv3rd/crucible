@@ -95,8 +95,8 @@ interface CacheLifetime<TVal> {
     untilStale: number;
 }
 
-interface CacheDataStructure<TVal> {
-    append: (current: TVal, incomming: TVal) => TVal;
+interface CacheDataStructure<TVal, TIn> {
+    append: (current: TVal, incomming: TVal, input: TIn) => TVal;
     match: (current: TVal, incomming: TVal) => boolean;
 }
 
@@ -104,7 +104,7 @@ interface CacheSetup<TVal, TIn> {
     name: string;
     fetch: (input: TIn) => CacheFetchTask<TVal>;
     lifetime: CacheLifetime<TVal>;
-    structure: CacheDataStructure<TVal>;
+    structure: CacheDataStructure<TVal, TIn>;
 }
 
 interface CacheSetupFacade<TVal, TIn> {

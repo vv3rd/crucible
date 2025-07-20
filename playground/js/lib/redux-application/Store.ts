@@ -77,11 +77,11 @@ const same = <T>(thing: T): T => thing;
 function createStore<TState, TCtx = {}>(
     reducer: Reducer<TState>,
     {
-        overlay = same,
         context = {} as TCtx,
+        overlay = same,
     }: {
-        overlay?: StoreOverlay<TState, TCtx>;
         context?: TCtx;
+        overlay?: StoreOverlay<TState, TCtx>;
     } = {},
 ) {
     const store: Store<TState, TCtx> = overlay(createStoreImpl)(reducer, context, () => store);
@@ -133,7 +133,7 @@ const createStoreImpl: StoreCreator<any, any> = (reducer, context, final) => {
             }
         },
 
-        subscribe(callback = noop) {
+        subscribe(callback) {
             const self = final();
             let listener = listeners.get(callback);
             if (listener === undefined) {
@@ -258,7 +258,7 @@ function createStoreForTask<TState, TCtx>(
             },
             [Symbol.dispose]: unsubscribe,
             [Symbol.asyncIterator]: (): AsyncIterator<Msg> => ({
-                async next() {
+                next: async () => {
                     try {
                         return { value: await stream.nextMessage() };
                     } catch {
