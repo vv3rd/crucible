@@ -1,0 +1,11 @@
+
+program := "main"
+
+_default:
+    just --list
+
+dev:
+    entr sh -c 'clear && just build && ./build/{{program}}' <<< {{program}}.hs
+
+build:
+    ghc {{program}}.hs -outputdir build -o build/{{program}}
