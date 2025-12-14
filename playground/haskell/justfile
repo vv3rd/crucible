@@ -2,7 +2,9 @@
 program := "main"
 
 _default:
-    just --list
+    @echo $(ghc --version)
+    @echo
+    @just --list
 
 dev:
     entr sh -c 'clear && just build && ./build/{{program}}' <<< {{program}}.hs
