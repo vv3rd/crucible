@@ -1,6 +1,18 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 
-main = do
-    putStrLn $ unlines $ withBoldBorder $ withEqualPadding ["Greetings","World"]
+import Data.Char
+import Text.Printf
+
+main = putStr $ unlines ([ansiRGB 64 130 109 ++ "GREEN_KEK" ++ ansiReset] ++ ["LOL"])
+
+ansiEsc = '\ESC'
+ansiReset = ansiEsc : "[0m"
+
+ansiRGB :: Int -> Int -> Int -> String
+ansiRGB r g b = ansiEsc : printf "[38;2;%i;%i;%im" r g b
+
+-- main = do
+--     putStrLn $ unlines $ withBoldBorder $ withEqualPadding ["Greetings","World"]
 
 withEqualPadding = withBorder paddingTemplate
 
