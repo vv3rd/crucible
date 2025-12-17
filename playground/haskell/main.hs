@@ -3,16 +3,28 @@
 import Data.Char
 import Text.Printf
 
-main = putStr $ unlines ([ansiRGB 64 130 109 ++ "GREEN_KEK" ++ ansiReset] ++ ["LOL"])
+-- main = interact (unlines . withBoldBorder . lines)
+
+main = putStrLn
+  $ unlines . withThinBorder . lines
+  $ concat [ansiColorGreen, "GREEN_KEK", ansiReset, "\nLOL"]
+  where
+    ansiColorGreen = ansiColor $ colorFromRGB 64 130 109
 
 ansiEsc = '\ESC'
 ansiReset = ansiEsc : "[0m"
 
-ansiRGB :: Int -> Int -> Int -> String
-ansiRGB r g b = ansiEsc : printf "[38;2;%i;%i;%im" r g b
+ansiColor :: Color -> String
+ansiColor (RgbColor (r, g, b)) = ansiEsc : printf "[38;2;%i;%i;%im" r g b
 
--- main = do
---     putStrLn $ unlines $ withBoldBorder $ withEqualPadding ["Greetings","World"]
+data Color = RgbColor (Int, Int, Int)
+
+data Texel = Texel
+  { text :: String
+  , ansi :: String
+  }
+
+colorFromRGB r g b = RgbColor (r, g, b)
 
 withEqualPadding = withBorder paddingTemplate
 
