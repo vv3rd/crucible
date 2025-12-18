@@ -26,6 +26,25 @@ data Texel = Texel
 
 colorFromRGB r g b = RgbColor (r, g, b)
 
+-- | Assumes h s l are within set [0..1] where hue is a fraction of a circle instead of degree
+rgbFromHsl :: (Float, Float, Float) -> (Float, Float, Float)
+rgbFromHsl (h, 0, l) = (l * 255, l * 255, l * 255)
+rgbFromHsl (h, s, l) = (r * 255, g * 255, b * 255)
+  where
+    q = if l < 0.5 then l * (1 + s) else l + s - l * s
+    p = 2 * l - q
+    r = channelFromHue p q (h + 1/3)
+    g = channelFromHue p q (h)
+    b = channelFromHue p q (h - 1/3)
+    channelFromHue p q t
+      | t < 0 = channelFromHue p q (t + 1)
+      | t > 1 = channelFromHue p q (t - 1)
+      | t < 1/6 = p + (q - p) * 6 * t
+      | t < 1/2 = q
+      | t < 2/3 = p + (q - p) * (2/3 - t) * 6
+      | otherwise = p
+
+
 withEqualPadding = withBorder paddingTemplate
 
 withThinBorder = withBorder borderTemplateThin
