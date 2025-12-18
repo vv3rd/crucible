@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+-- {-# LANGUAGE NoFieldSelectors #-}
 
 import Data.Char
 import Text.Printf
@@ -22,6 +23,12 @@ data Color = RgbColor (Int, Int, Int)
 data Texel = Texel
   { text :: String
   , ansi :: String
+  }
+
+data Box = Box
+  { text :: String
+  , view :: [Texel]
+  , size :: (Int, Int)
   }
 
 colorFromRGB r g b = RgbColor (r, g, b)
