@@ -25,9 +25,19 @@ data Texel = Texel
   , ansi :: String
   }
 
+-- On a surface level a Box is just a 2d array of Texels
+-- A Texel is a Char surrounded by ansi sequences
+-- To render a box I must map Texels to string and join 2d
+-- with newlines.
+-- I wan't to separate original content of the box from the
+-- styling symbols and ansi sequences. Meaning that Box should
+-- be: a 2d array of Texels AND an underlying content.
+-- This pattern of having a computation along side some other thing (like a log)
+-- is kind of what Writer monad is for. I should look into usefulness of
+-- writer moand for this case.
 data Box = Box
   { text :: String
-  , view :: [Texel]
+  , view :: [[Texel]]
   , size :: (Int, Int)
   }
 
