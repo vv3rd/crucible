@@ -2,15 +2,13 @@
 -- {-# LANGUAGE NoFieldSelectors #-}
 
 import Data.Char
+import Data.List
 import Text.Printf
 
--- main = interact (unlines . withBoldBorder . lines)
-
 main = putStrLn
-  $ unlines . withThinBorder . lines
-  $ concat [ansiColorGreen, "GREEN_KEK", ansiReset, "\nLOL"]
-  where
-    ansiColorGreen = ansiColor $ colorFromRGB 64 130 109
+  $ intercalate "\n" . map texelsToString
+  $ withThinBorder
+  $ [texelFromChar 'G' : map texelFromChar "REEN TEXT", map texelFromChar "BOTTOM TEXT"]
 
 ansiEsc = '\ESC'
 ansiReset = ansiEsc : "[0m"
@@ -18,12 +16,20 @@ ansiReset = ansiEsc : "[0m"
 ansiColor :: Color -> String
 ansiColor (RgbColor (r, g, b)) = ansiEsc : printf "[38;2;%i;%i;%im" r g b
 
+ansiColorGreen = ansiColor $ RgbColor (64, 130, 109)
+
 data Color = RgbColor (Int, Int, Int)
 
 data Texel = Texel
-  { text :: String
-  , ansi :: String
+  { texelSymbol :: Char
+  , precedingAnsi :: String
+  , followingAnsi :: String
   }
+
+texelFromChar char = Texel char "" ""
+texelFromFirst [char] = texelFromChar char
+
+texelsToString = concat . map (\texel -> precedingAnsi texel ++ [texelSymbol texel] ++ followingAnsi texel)
 
 -- On a surface level a Box is just a 2d array of Texels
 -- A Texel is a Char surrounded by ansi sequences
@@ -40,27 +46,6 @@ data Box = Box
   , view :: [[Texel]]
   , size :: (Int, Int)
   }
-
-colorFromRGB r g b = RgbColor (r, g, b)
-
--- | Assumes h s l are within set [0..1] where hue is a fraction of a circle instead of degree
-rgbFromHsl :: (Float, Float, Float) -> (Float, Float, Float)
-rgbFromHsl (h, 0, l) = (l * 255, l * 255, l * 255)
-rgbFromHsl (h, s, l) = (r * 255, g * 255, b * 255)
-  where
-    q = if l < 0.5 then l * (1 + s) else l + s - l * s
-    p = 2 * l - q
-    r = channelFromHue p q (h + 1/3)
-    g = channelFromHue p q (h)
-    b = channelFromHue p q (h - 1/3)
-    channelFromHue p q t
-      | t < 0 = channelFromHue p q (t + 1)
-      | t > 1 = channelFromHue p q (t - 1)
-      | t < 1/6 = p + (q - p) * 6 * t
-      | t < 1/2 = q
-      | t < 2/3 = p + (q - p) * (2/3 - t) * 6
-      | otherwise = p
-
 
 withEqualPadding = withBorder paddingTemplate
 
@@ -83,7 +68,7 @@ paddingTemplate = borderTemplate
    "   "
    "   "
 
-withBorder:: BorderTemplate -> [String] -> [String]
+withBorder:: BorderTemplate Texel -> [[Texel]] -> [[Texel]]
 withBorder template lines = borderTop ++ map bordered lines ++ borderBottom
   where
     ((tl, tc, tr), (cl, cc, cr), (bl, bc, br)) = template
@@ -93,18 +78,37 @@ withBorder template lines = borderTop ++ map bordered lines ++ borderBottom
     borderBottom  = [bl : replicate boxWidth bc ++ [br]]
     bordered line = [cl, cc] ++ line ++ replicate (maxLength - length line) cc ++ [cc, cr]
 
-type BorderTemplate =
-  ( (Char, Char, Char)
-  , (Char, Char, Char)
-  , (Char, Char, Char) )
+type BorderTemplate a =
+  ( (a, a, a)
+  , (a, a, a)
+  , (a, a, a) )
 
-borderTemplate :: String -> String -> String -> BorderTemplate
+borderTemplate :: String -> String -> String -> BorderTemplate Texel
 borderTemplate row1 row2 row3 =
   let
-    cells [cell1, cell2, cell3] = (cell1, cell2, cell3)
+    cells [cell1, cell2, cell3] = (texelFromChar cell1, texelFromChar cell2, texelFromChar cell3)
   in
   ( cells row1
   , cells row2
   , cells row3
   )
+
+-- | Assumes h s l are within set [0..1] where hue is a fraction of a circle instead of degree
+rgbFromHsl :: (Float, Float, Float) -> (Float, Float, Float)
+rgbFromHsl (h, 0, l) = (l * 255, l * 255, l * 255)
+rgbFromHsl (h, s, l) = (r * 255, g * 255, b * 255)
+  where
+    q = if l < 0.5 then l * (1 + s) else l + s - l * s
+    p = 2 * l - q
+    r = channelFromHue p q (h + 1/3)
+    g = channelFromHue p q (h)
+    b = channelFromHue p q (h - 1/3)
+    channelFromHue p q t
+      | t < 0 = channelFromHue p q (t + 1)
+      | t > 1 = channelFromHue p q (t - 1)
+      | t < 1/6 = p + (q - p) * 6 * t
+      | t < 1/2 = q
+      | t < 2/3 = p + (q - p) * (2/3 - t) * 6
+      | otherwise = p
+
 

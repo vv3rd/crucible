@@ -10,15 +10,17 @@
     system = pkgs.stdenv.hostPlatform.system;
 
     devShell.${system} = pkgs.mkShell {
-      packages = [
-        pkgs.ghc
+      packages = with pkgs; [
+        haskell.compiler.ghc98
+        haskellPackages.haskell-language-server
+        # pkgs.ghc
         pkgs.entr
         pkgs.just
       ];
 
       shellHook = ''
-          just | ${pkgs.lib.getExe pkgs.cowsay} | ${pkgs.lib.getExe pkgs.lolcat}
-        '';
+        just | ${pkgs.lib.getExe pkgs.cowsay} | ${pkgs.lib.getExe pkgs.lolcat}
+      '';
     };
   };
 }
