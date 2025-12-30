@@ -7,7 +7,7 @@ _default:
     @just --list
 
 dev:
-    entr sh -c 'clear && just build && ./build/{{program}}' <<< {{program}}.hs
+    entr sh -c 'clear && just build && ./out/{{program}}' <<< src/{{program}}.hs
 
 build:
-    ghc {{program}}.hs -outputdir build -o build/{{program}}
+    ghc --make src/{{program}}.hs -outputdir out -o out/{{program}} -i:lib
