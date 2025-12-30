@@ -4,11 +4,13 @@
 import Data.Char
 import Data.List
 import Text.Printf
+import Texel qualified as Texel
+import Texel (Texel)
 
 main = putStrLn
-  $ intercalate "\n" . map texelsToString
+  $ intercalate "\n" . map Texel.toString
   $ withThinBorder
-  $ [texelFromChar 'G' : map texelFromChar "REEN TEXT", map texelFromChar "BOTTOM TEXT"]
+  $ [Texel.fromChar 'G' : map Texel.fromChar "REEN TEXT", map Texel.fromChar "BOTTOM TEXT"]
 
 ansiEsc = '\ESC'
 ansiReset = ansiEsc : "[0m"
@@ -19,17 +21,6 @@ ansiColor (RgbColor (r, g, b)) = ansiEsc : printf "[38;2;%i;%i;%im" r g b
 ansiColorGreen = ansiColor $ RgbColor (64, 130, 109)
 
 data Color = RgbColor (Int, Int, Int)
-
-data Texel = Texel
-  { texelSymbol :: Char
-  , precedingAnsi :: String
-  , followingAnsi :: String
-  }
-
-texelFromChar char = Texel char "" ""
-texelFromFirst [char] = texelFromChar char
-
-texelsToString = concat . map (\texel -> precedingAnsi texel ++ [texelSymbol texel] ++ followingAnsi texel)
 
 -- On a surface level a Box is just a 2d array of Texels
 -- A Texel is a Char surrounded by ansi sequences
@@ -86,7 +77,7 @@ type BorderTemplate a =
 borderTemplate :: String -> String -> String -> BorderTemplate Texel
 borderTemplate row1 row2 row3 =
   let
-    cells [cell1, cell2, cell3] = (texelFromChar cell1, texelFromChar cell2, texelFromChar cell3)
+    cells [cell1, cell2, cell3] = (Texel.fromChar cell1, Texel.fromChar cell2, Texel.fromChar cell3)
   in
   ( cells row1
   , cells row2
